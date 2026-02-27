@@ -1,0 +1,12 @@
+[Unit]
+Description=Neurader — Log cleanup every 12 hours
+Documentation=https://github.com/yourorg/neurader
+Requires=neurader-cleanup.service
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=12h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
