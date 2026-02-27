@@ -1,0 +1,9 @@
+[Unit]
+Description=Neurader — Delete playbook logs older than retention period
+Documentation=https://github.com/yourorg/neurader
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/neurader clean
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,128 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_NEURADER",
+      "label": "Neurader",
+      "type": "datasource",
+      "pluginId": "simplejson"
+    }
+  ],
+  "uid": "neurader-main",
+  "title": "Neurader — Ansible Playbook Monitor",
+  "description": "Per-playbook execution results with per-host green/red status and error drilldown",
+  "tags": ["ansible", "neurader"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-7d", "to": "now" },
+  "annotations": {
+    "list": [
+      {
+        "datasource": { "type": "datasource", "uid": "${DS_NEURADER}" },
+        "enable": true,
+        "name": "Playbook Runs",
+        "tags": ["neurader"],
+        "type": "tags"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "label": "Playbook Run",
+        "name": "playbook_run",
+        "query": "playbook_runs",
+        "refresh": 2,
+        "sort": 1,
+        "type": "query",
+        "datasource": { "type": "datasource", "uid": "${DS_NEURADER}" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "All Playbook Runs",
+      "description": "Every recorded execution. Select a run from the dropdown above to see host details.",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "datasource": { "type": "datasource", "uid": "${DS_NEURADER}" },
+      "targets": [{ "refId": "A", "target": "playbook_runs_table" }],
+      "options": {
+        "sortBy": [{ "displayName": "Timestamp", "desc": true }]
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Status" },
+            "properties": [
+              { "id": "custom.displayMode", "value": "color-background" },
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "SUCCESS": { "color": "green", "index": 0 } } },
+                  { "type": "value", "options": { "FAILED":  { "color": "red",   "index": 1 } } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Host Status — $playbook_run",
+      "description": "Green = success. Red = failed or unreachable. Click a red host to see the error output below.",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 10 },
+      "datasource": { "type": "datasource", "uid": "${DS_NEURADER}" },
+      "targets": [
+        {
+          "refId": "A",
+          "target": "host_status",
+          "payload": { "run": "$playbook_run" }
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": true },
+        "orientation": "horizontal",
+        "colorMode": "background",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "success":     { "text": "✓ SUCCESS",     "color": "green" },
+                "failed":      { "text": "✗ FAILED",      "color": "red"   },
+                "unreachable": { "text": "✗ UNREACHABLE", "color": "red"   }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "Error Detail — Failed Hosts",
+      "description": "Full error output for any failed hosts in the selected run.",
+      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 8 },
+      "datasource": { "type": "datasource", "uid": "${DS_NEURADER}" },
+      "targets": [
+        {
+          "refId": "A",
+          "target": "error_detail",
+          "payload": { "run": "$playbook_run" }
+        }
+      ],
+      "options": {
+        "mode": "markdown",
+        "content": "Select a run above. Error output from failed hosts will appear here."
+      }
+    }
+  ]
+}
