@@ -53,12 +53,20 @@ func Run() error {
 
 	// ── Step 2: Create directories ────────────────────────────────────────
 	stepHeader(2, "Creating directories")
-	for _, dir := range []string{config.LogDir, config.ConfigDir} {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("creating %s: %w", dir, err)
-		}
-		printOK("Created %s", dir)
+
+	// Config dir — root only write
+	if err := os.MkdirAll(config.ConfigDir, 0755); err != nil {
+		return fmt.Errorf("creating %s: %w", config.ConfigDir, err)
 	}
+	printOK("Created %s", config.ConfigDir)
+
+	// Log dir — world writable so pip/pipx Ansible running as non-root
+	// can write log files directly from the callback plugin
+	if err := os.MkdirAll(config.LogDir, 0777); err != nil {
+		return fmt.Errorf("creating %s: %w", config.LogDir, err)
+	}
+	os.Chmod(config.LogDir, 0777) //nolint:errcheck
+	printOK("Created %s", config.LogDir)
 
 	// ── Step 3: Configuration prompts ─────────────────────────────────────
 	stepHeader(3, "Configuration")
@@ -90,7 +98,7 @@ func Run() error {
 	if err := config.Save(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
-	printOK("Config written (mode 0600 — root only)")
+	printOK("Config written")
 
 	// ── Step 5: Install Python callback plugin ────────────────────────────
 	stepHeader(5, "Installing Ansible callback plugin")
