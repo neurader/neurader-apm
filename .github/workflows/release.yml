@@ -53,8 +53,7 @@ jobs:
           echo "Building: ${VERSION} (is_tag=${IS_TAG})"
 
       # ── 6. Build 3 binaries ───────────────────────────────────────────────
-      # Named x86_64 / arm64 / arm — matches Linux naming convention,
-      # not Go's internal naming (amd64)
+      # Named amd64 / arm64 / arm — consistent with Go and Docker naming
       - name: Build binaries
         run: |
           mkdir -p dist
@@ -62,7 +61,7 @@ jobs:
           echo "→ linux/x86_64"
           GOOS=linux GOARCH=amd64 go build \
             -ldflags="-s -w -X main.version=${{ env.VERSION }}" \
-            -o dist/neurader-linux-x86_64 \
+            -o dist/neurader-linux-amd64 \
             ./cmd/neurader
 
           echo "→ linux/arm64"
@@ -85,7 +84,7 @@ jobs:
         run: |
           cd dist
           sha256sum \
-            neurader-linux-x86_64 \
+            neurader-linux-amd64 \
             neurader-linux-arm64 \
             neurader-linux-arm \
             > checksums.sha256
@@ -107,7 +106,7 @@ jobs:
         run: |
           S3="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/${{ env.VERSION }}"
 
-          aws s3 cp dist/neurader-linux-x86_64  ${S3}/neurader-linux-x86_64  --no-progress
+          aws s3 cp dist/neurader-linux-amd64  ${S3}/neurader-linux-amd64  --no-progress
           aws s3 cp dist/neurader-linux-arm64   ${S3}/neurader-linux-arm64   --no-progress
           aws s3 cp dist/neurader-linux-arm     ${S3}/neurader-linux-arm     --no-progress
           aws s3 cp dist/checksums.sha256       ${S3}/checksums.sha256       --no-progress
@@ -123,7 +122,7 @@ jobs:
           SRC="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/${{ env.VERSION }}"
           DST="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/latest"
 
-          aws s3 cp ${SRC}/neurader-linux-x86_64  ${DST}/neurader-linux-x86_64  --no-progress
+          aws s3 cp ${SRC}/neurader-linux-amd64  ${DST}/neurader-linux-amd64  --no-progress
           aws s3 cp ${SRC}/neurader-linux-arm64   ${DST}/neurader-linux-arm64   --no-progress
           aws s3 cp ${SRC}/neurader-linux-arm     ${DST}/neurader-linux-arm     --no-progress
           aws s3 cp ${SRC}/checksums.sha256       ${DST}/checksums.sha256       --no-progress
@@ -175,13 +174,13 @@ jobs:
 
             | Architecture | Who uses this | Download |
             |---|---|---|
-            | x86_64 | Intel/AMD servers, most cloud VMs | [neurader-linux-x86_64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-x86_64) |
+            | x86_64 | Intel/AMD servers, most cloud VMs | [neurader-linux-amd64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64) |
             | arm64  | AWS Graviton, GCP Tau, Raspberry Pi 4/5 | [neurader-linux-arm64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm64) |
             | arm    | Raspberry Pi 2/3, older embedded devices | [neurader-linux-arm](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm) |
 
             ### Install
             ```bash
-            curl -L https://neurader.operman.in/neurader/releases/latest/neurader-linux-x86_64 -o neurader
+            curl -L https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64 -o neurader
             chmod +x neurader
             sudo mv neurader /usr/local/bin/neurader
             sudo neurader init
