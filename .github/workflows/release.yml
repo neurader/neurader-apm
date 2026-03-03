@@ -105,7 +105,7 @@ jobs:
       # s3://bucket/releases/v2-test-a3f9c12/  ← branch test build
       - name: Upload versioned release to S3
         run: |
-          S3="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/${{ env.VERSION }}"
+          S3="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/${{ env.VERSION }}"
 
           aws s3 cp dist/neurader-linux-x86_64  ${S3}/neurader-linux-x86_64  --no-progress
           aws s3 cp dist/neurader-linux-arm64   ${S3}/neurader-linux-arm64   --no-progress
@@ -120,8 +120,8 @@ jobs:
       - name: Update latest folder
         if: env.IS_TAG == 'true'
         run: |
-          SRC="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/${{ env.VERSION }}"
-          DST="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/latest"
+          SRC="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/${{ env.VERSION }}"
+          DST="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/latest"
 
           aws s3 cp ${SRC}/neurader-linux-x86_64  ${DST}/neurader-linux-x86_64  --no-progress
           aws s3 cp ${SRC}/neurader-linux-arm64   ${DST}/neurader-linux-arm64   --no-progress
@@ -132,7 +132,7 @@ jobs:
 
       # ── 11. Update version.json — ONLY for real tags ──────────────────────
       # Website fetches this to display current version number dynamically.
-      # https://neurader.operman.in/neurader/version.json
+      # https://neurader.operman.in/neurader/releases/version.json
       - name: Update version.json
         if: env.IS_TAG == 'true'
         run: |
@@ -141,7 +141,7 @@ jobs:
             > version.json
 
           aws s3 cp version.json \
-            s3://${{ secrets.S3_BUCKET_NAME }}/neurader/version.json \
+            s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/version.json \
             --no-progress
 
           echo "✓ version.json → ${{ env.VERSION }}"
@@ -154,7 +154,7 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/neurader/latest/*" "/neurader/version.json"
+            --paths "/neurader/releases/latest/*" "/neurader/releases/version.json"
 
           echo "✓ CloudFront cache invalidated"
 
@@ -175,13 +175,13 @@ jobs:
 
             | Architecture | Who uses this | Download |
             |---|---|---|
-            | x86_64 | Intel/AMD servers, most cloud VMs | [neurader-linux-x86_64](https://neurader.operman.in/neurader/latest/neurader-linux-x86_64) |
-            | arm64  | AWS Graviton, GCP Tau, Raspberry Pi 4/5 | [neurader-linux-arm64](https://neurader.operman.in/neurader/latest/neurader-linux-arm64) |
-            | arm    | Raspberry Pi 2/3, older embedded devices | [neurader-linux-arm](https://neurader.operman.in/neurader/latest/neurader-linux-arm) |
+            | x86_64 | Intel/AMD servers, most cloud VMs | [neurader-linux-x86_64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-x86_64) |
+            | arm64  | AWS Graviton, GCP Tau, Raspberry Pi 4/5 | [neurader-linux-arm64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm64) |
+            | arm    | Raspberry Pi 2/3, older embedded devices | [neurader-linux-arm](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm) |
 
             ### Install
             ```bash
-            curl -L https://neurader.operman.in/neurader/latest/neurader-linux-x86_64 -o neurader
+            curl -L https://neurader.operman.in/neurader/releases/latest/neurader-linux-x86_64 -o neurader
             chmod +x neurader
             sudo mv neurader /usr/local/bin/neurader
             sudo neurader init
@@ -189,7 +189,7 @@ jobs:
 
             ### Verify checksum
             ```bash
-            curl -L https://neurader.operman.in/neurader/latest/checksums.sha256 -o checksums.sha256
+            curl -L https://neurader.operman.in/neurader/releases/latest/checksums.sha256 -o checksums.sha256
             sha256sum -c checksums.sha256
             ```
           draft: false
