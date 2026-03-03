@@ -22,6 +22,11 @@ DOCUMENTATION = '''
       - neurader binary installed at /usr/local/bin/neurader
 '''
 
+# Must be False — neurader is enabled via callbacks_enabled in ansible.cfg.
+# Setting True causes Ansible to print "unable to load" warning for
+# notification-type callbacks even when they load successfully.
+CALLBACK_NEEDS_ENABLED = False
+
 from ansible.plugins.callback import CallbackBase
 
 import datetime
@@ -56,7 +61,7 @@ class CallbackModule(CallbackBase):
     CALLBACK_VERSION      = 2.0
     CALLBACK_TYPE         = 'notification'
     CALLBACK_NAME         = 'neurader'
-    CALLBACK_NEEDS_ENABLED = True
+    CALLBACK_NEEDS_ENABLED = False  # enabled via callbacks_enabled in ansible.cfg
 
     def __init__(self):
         super(CallbackModule, self).__init__()
