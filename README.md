@@ -1,4 +1,4 @@
-# neurader-integration
+# NeuRader - Ansible Execution Monitor
 
 # Neurader
 
@@ -165,5 +165,6 @@ Requires Go 1.22+.
 ---
 
 ## License
+
 
 Apache License Version 2.0
