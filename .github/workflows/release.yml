@@ -1,0 +1,196 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'      # v1.0.0, v1.2.3  → real release, updates /latest/
+    branches:
+      - 'v*'      # v2-testing       → test build, does NOT update /latest/
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ── 1. Checkout ──────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Go setup ──────────────────────────────────────────────────────
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      # ── 3. Download dependencies ─────────────────────────────────────────
+      - name: Download dependencies
+        run: go mod tidy
+
+      # ── 4. Run tests ─────────────────────────────────────────────────────
+      - name: Run tests
+        run: go test ./...
+
+      # ── 5. Resolve version ────────────────────────────────────────────────
+      # Tags   → v1.0.0
+      # Branch → v2-testing-a3f9c12  (branch name + short commit hash)
+      - name: Resolve version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+            IS_TAG=true
+          else
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            VERSION="${GITHUB_REF_NAME}-${SHORT_SHA}"
+            IS_TAG=false
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "IS_TAG=${IS_TAG}"   >> $GITHUB_ENV
+          echo "Building: ${VERSION} (is_tag=${IS_TAG})"
+
+      # ── 6. Build 3 binaries ───────────────────────────────────────────────
+      # Named x86_64 / arm64 / arm — matches Linux naming convention,
+      # not Go's internal naming (amd64)
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+
+          echo "→ linux/x86_64"
+          GOOS=linux GOARCH=amd64 go build \
+            -ldflags="-s -w -X main.version=${{ env.VERSION }}" \
+            -o dist/neurader-linux-x86_64 \
+            ./cmd/neurader
+
+          echo "→ linux/arm64"
+          GOOS=linux GOARCH=arm64 go build \
+            -ldflags="-s -w -X main.version=${{ env.VERSION }}" \
+            -o dist/neurader-linux-arm64 \
+            ./cmd/neurader
+
+          echo "→ linux/arm"
+          GOOS=linux GOARCH=arm GOARM=7 go build \
+            -ldflags="-s -w -X main.version=${{ env.VERSION }}" \
+            -o dist/neurader-linux-arm \
+            ./cmd/neurader
+
+          echo "=== Built ==="
+          ls -lh dist/
+
+      # ── 7. Generate checksums ─────────────────────────────────────────────
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum \
+            neurader-linux-x86_64 \
+            neurader-linux-arm64 \
+            neurader-linux-arm \
+            > checksums.sha256
+          echo "=== Checksums ==="
+          cat checksums.sha256
+
+      # ── 8. Configure AWS credentials ─────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      # ── 9. Upload versioned copy to S3 ────────────────────────────────────
+      # s3://bucket/releases/v1.0.0/   ← permanent, never overwritten
+      # s3://bucket/releases/v2-test-a3f9c12/  ← branch test build
+      - name: Upload versioned release to S3
+        run: |
+          S3="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/${{ env.VERSION }}"
+
+          aws s3 cp dist/neurader-linux-x86_64  ${S3}/neurader-linux-x86_64  --no-progress
+          aws s3 cp dist/neurader-linux-arm64   ${S3}/neurader-linux-arm64   --no-progress
+          aws s3 cp dist/neurader-linux-arm     ${S3}/neurader-linux-arm     --no-progress
+          aws s3 cp dist/checksums.sha256       ${S3}/checksums.sha256       --no-progress
+
+          echo "✓ Versioned → ${S3}/"
+
+      # ── 10. Update /latest/ — ONLY for real tags ──────────────────────────
+      # Branch builds never touch /latest/ so website always shows
+      # a stable release, not an experimental branch build.
+      - name: Update latest folder
+        if: env.IS_TAG == 'true'
+        run: |
+          SRC="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/${{ env.VERSION }}"
+          DST="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/latest"
+
+          aws s3 cp ${SRC}/neurader-linux-x86_64  ${DST}/neurader-linux-x86_64  --no-progress
+          aws s3 cp ${SRC}/neurader-linux-arm64   ${DST}/neurader-linux-arm64   --no-progress
+          aws s3 cp ${SRC}/neurader-linux-arm     ${DST}/neurader-linux-arm     --no-progress
+          aws s3 cp ${SRC}/checksums.sha256       ${DST}/checksums.sha256       --no-progress
+
+          echo "✓ Latest updated → ${DST}/"
+
+      # ── 11. Update version.json — ONLY for real tags ──────────────────────
+      # Website fetches this to display current version number dynamically.
+      # https://neurader.operman.in/neurader/version.json
+      - name: Update version.json
+        if: env.IS_TAG == 'true'
+        run: |
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "{\"version\": \"${{ env.VERSION }}\", \"released_at\": \"${DATE}\"}" \
+            > version.json
+
+          aws s3 cp version.json \
+            s3://${{ secrets.S3_BUCKET_NAME }}/neurader/version.json \
+            --no-progress
+
+          echo "✓ version.json → ${{ env.VERSION }}"
+
+      # ── 12. Invalidate CloudFront cache — ONLY for real tags ──────────────
+      # Forces users to get the new binary immediately.
+      # Only /latest/* needs invalidation — versioned paths never change.
+      - name: Invalidate CloudFront cache
+        if: env.IS_TAG == 'true'
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/neurader/latest/*" "/neurader/version.json"
+
+          echo "✓ CloudFront cache invalidated"
+
+      # ── 13. Create GitHub Release — ONLY for real tags ────────────────────
+      # No binaries attached — just a changelog marker page on GitHub.
+      # All actual downloads come from S3 via CloudFront.
+      - name: Create GitHub Release
+        if: env.IS_TAG == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Neurader ${{ env.VERSION }}"
+          body: |
+            ## Neurader ${{ env.VERSION }}
+
+            > Binaries are served via CDN — not from GitHub.
+
+            ### Download
+
+            | Architecture | Who uses this | Download |
+            |---|---|---|
+            | x86_64 | Intel/AMD servers, most cloud VMs | [neurader-linux-x86_64](https://neurader.operman.in/neurader/latest/neurader-linux-x86_64) |
+            | arm64  | AWS Graviton, GCP Tau, Raspberry Pi 4/5 | [neurader-linux-arm64](https://neurader.operman.in/neurader/latest/neurader-linux-arm64) |
+            | arm    | Raspberry Pi 2/3, older embedded devices | [neurader-linux-arm](https://neurader.operman.in/neurader/latest/neurader-linux-arm) |
+
+            ### Install
+            ```bash
+            curl -L https://neurader.operman.in/neurader/latest/neurader-linux-x86_64 -o neurader
+            chmod +x neurader
+            sudo mv neurader /usr/local/bin/neurader
+            sudo neurader init
+            ```
+
+            ### Verify checksum
+            ```bash
+            curl -L https://neurader.operman.in/neurader/latest/checksums.sha256 -o checksums.sha256
+            sha256sum -c checksums.sha256
+            ```
+          draft: false
+          prerelease: ${{ contains(env.VERSION, '-rc') || contains(env.VERSION, '-beta') || contains(env.VERSION, '-alpha') }}
