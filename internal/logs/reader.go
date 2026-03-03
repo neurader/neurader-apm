@@ -32,8 +32,10 @@ func List(logDir string) error {
 	}
 
 	if len(metas) == 0 {
-		fmt.Println("\n  No playbook runs recorded yet.")
-		fmt.Println("  Run an ansible-playbook command and logs will appear here.\n")
+		fmt.Println()
+		fmt.Println("  No playbook runs recorded yet.")
+		fmt.Println("  Run an ansible-playbook command and logs will appear here.")
+		fmt.Println()
 		return nil
 	}
 
