@@ -61,5 +61,9 @@ func Save(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ConfigFile, data, 0600)
+	// 0644 — readable by all users so non-root commands (neurader list,
+	// neurader show, neurader status) work without sudo.
+	// The Grafana API key is stored here — if that is a concern, users can
+	// manually chmod 0600 after init.
+	return os.WriteFile(ConfigFile, data, 0644)
 }
