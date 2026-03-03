@@ -58,7 +58,7 @@ jobs:
         run: |
           mkdir -p dist
 
-          echo "→ linux/x86_64"
+          echo "→ linux/amd64"
           GOOS=linux GOARCH=amd64 go build \
             -ldflags="-s -w -X main.version=${{ env.VERSION }}" \
             -o dist/neurader-linux-amd64 \
@@ -106,9 +106,9 @@ jobs:
         run: |
           S3="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/${{ env.VERSION }}"
 
-          aws s3 cp dist/neurader-linux-amd64  ${S3}/neurader-linux-amd64  --no-progress
-          aws s3 cp dist/neurader-linux-arm64   ${S3}/neurader-linux-arm64   --no-progress
-          aws s3 cp dist/neurader-linux-arm     ${S3}/neurader-linux-arm     --no-progress
+          aws s3 cp dist/neurader-linux-amd64  ${S3}/neurader-linux-amd64  --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-amd64"
+          aws s3 cp dist/neurader-linux-arm64   ${S3}/neurader-linux-arm64   --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm64"
+          aws s3 cp dist/neurader-linux-arm     ${S3}/neurader-linux-arm     --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm"
           aws s3 cp dist/checksums.sha256       ${S3}/checksums.sha256       --no-progress
 
           echo "✓ Versioned → ${S3}/"
@@ -122,9 +122,9 @@ jobs:
           SRC="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/${{ env.VERSION }}"
           DST="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/latest"
 
-          aws s3 cp ${SRC}/neurader-linux-amd64  ${DST}/neurader-linux-amd64  --no-progress
-          aws s3 cp ${SRC}/neurader-linux-arm64   ${DST}/neurader-linux-arm64   --no-progress
-          aws s3 cp ${SRC}/neurader-linux-arm     ${DST}/neurader-linux-arm     --no-progress
+          aws s3 cp ${SRC}/neurader-linux-amd64  ${DST}/neurader-linux-amd64  --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-amd64"
+          aws s3 cp ${SRC}/neurader-linux-arm64   ${DST}/neurader-linux-arm64   --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm64"
+          aws s3 cp ${SRC}/neurader-linux-arm     ${DST}/neurader-linux-arm     --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm"
           aws s3 cp ${SRC}/checksums.sha256       ${DST}/checksums.sha256       --no-progress
 
           echo "✓ Latest updated → ${DST}/"
