@@ -174,7 +174,7 @@ jobs:
 
             | Architecture | Who uses this | Download |
             |---|---|---|
-            | amd64 | Intel/AMD servers, most cloud VMs | [neurader-linux-amd64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64) |
+            | amd64 | Intel/AMD servers, most cloud VMs | [neurader-linux-amd64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm) |
             | arm64  | AWS Graviton, GCP Tau, Raspberry Pi 4/5 | [neurader-linux-arm64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm64) |
             | arm    | Raspberry Pi 2/3, older embedded devices | [neurader-linux-arm](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm) |
 
