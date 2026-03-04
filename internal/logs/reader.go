@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/fatih/color"
@@ -43,27 +42,38 @@ func List(logDir string) error {
 	redF := color.New(color.FgRed).SprintFunc()
 	boldF := color.New(color.Bold).SprintFunc()
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprintf(w, "\n  %s\t%s\t%s\t%s\t%s\t%s\n",
+	// tabwriter cannot account for ANSI color escape sequences — they add
+	// invisible bytes that throw off column width calculations. Fix: use
+	// fmt.Printf with fixed-width format strings instead of tabwriter,
+	// and apply color AFTER padding so column widths are always consistent.
+	fmt.Println()
+	fmt.Printf("  %-19s  %-20s  %-5s  %-7s  %-6s  %s\n",
 		boldF("TIMESTAMP"), boldF("PLAYBOOK"),
 		boldF("HOSTS"), boldF("SUCCESS"), boldF("FAILED"), boldF("FILE"))
-	fmt.Fprintln(w, "  ─────────────────────\t─────────────────────\t─────\t───────\t──────\t──────────────────────────────")
+	fmt.Printf("  %-19s  %-20s  %-5s  %-7s  %-6s  %s\n",
+		"───────────────────", "────────────────────",
+		"─────", "───────", "──────",
+		"──────────────────────────────────────")
 
 	for _, m := range metas {
-		failedStr := fmt.Sprintf("%d", m.Failed)
+		// Format numbers at fixed width BEFORE colorizing
+		// so the terminal sees consistent character counts
+		successStr := greenF(fmt.Sprintf("%-7d", m.Success))
+		failedVal := fmt.Sprintf("%-6d", m.Failed)
+		failedStr := failedVal
 		if m.Failed > 0 {
-			failedStr = redF(failedStr)
+			failedStr = redF(failedVal)
 		}
-		fmt.Fprintf(w, "  %s\t%s\t%d\t%s\t%s\t%s\n",
+
+		fmt.Printf("  %-19s  %-20s  %-5d  %s  %s  %s\n",
 			m.Timestamp.Format("2006-01-02 15:04:05"),
 			truncate(m.Playbook, 20),
 			m.Total,
-			greenF(fmt.Sprintf("%d", m.Success)),
+			successStr,
 			failedStr,
 			m.Filename,
 		)
 	}
-	w.Flush()
 	fmt.Println()
 	return nil
 }
