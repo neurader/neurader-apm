@@ -1,166 +1,98 @@
 # NeuRader
 
-> Ansible Execution Monitor — automatically logs every playbook run with per-host results, full error capture, and optional Grafana integration.
-
-No daemons. No ports. No agents on managed nodes. Just drop a binary on your Ansible controller and every `ansible-playbook` run is logged automatically.
+> Ansible Execution Monitor — automatically captures every playbook run as structured JSON with per-host results, full error output, and optional Grafana integration.
 
 ---
 
-## How it works
+## Architecture
 
 ```
-ansible-playbook site.yml
-        ↓
-neurader_callback.py (loaded by Ansible automatically)
-        ↓
-/var/log/neurader/site.yml_2025-01-24_14-30-00.json
-        ↓
-neurader list  →  neurader show  →  Grafana dashboard
+┌─────────────────────────────────────────────────────────────────┐
+│                        Ansible Controller                        │
+│                                                                  │
+│   ansible-playbook site.yml                                      │
+│          │                                                       │
+│          ▼                                                       │
+│   ┌─────────────────────────────────────────────┐               │
+│   │           Ansible Callback System            │               │
+│   │                                              │               │
+│   │   ansible.cfg                                │               │
+│   │   callbacks_enabled = neurader  ◄── patched  │               │
+│   │            │                   by init       │               │
+│   │            ▼                                 │               │
+│   │   neurader_callback.py                       │               │
+│   │   (Python plugin, auto-loaded by Ansible)    │               │
+│   └─────────────────────────────────────────────┘               │
+│          │                                                       │
+│          │  captures every host result in real time              │
+│          ▼                                                       │
+│   /var/log/neurader/                                             │
+│   └── site.yml_2025-01-24_14-30-00.json                         │
+│                                                                  │
+│   neurader binary (/usr/local/bin/neurader)                      │
+│   ├── reads logs  →  neurader list / show / status               │
+│   └── pushes logs →  Grafana (optional)                          │
+└─────────────────────────────────────────────────────────────────┘
+          │  SSH                │  SSH                │  SSH
+          ▼                     ▼                     ▼
+   ┌────────────┐       ┌────────────┐       ┌────────────┐
+   │  node1     │       │  node2     │       │  node3     │
+   │  managed   │       │  managed   │       │  managed   │
+   │  node      │       │  node      │       │  node      │
+   │            │       │            │       │            │
+   │ no neurader│       │ no neurader│       │ no neurader│
+   │ no agents  │       │ no agents  │       │ no agents  │
+   └────────────┘       └────────────┘       └────────────┘
 ```
 
-For every playbook run, neurader captures:
-
-- Per-host status — success, failed, or unreachable
-- Full error output for failed hosts — msg, stdout, stderr, rc, module name
-- Task summary per host — ok, changed, failed, skipped counts
-- Start time, end time, total hosts
+neurader lives entirely on the **controller**. Managed nodes have no awareness of it.
 
 ---
 
-## Installation
+## Components
 
-```bash
-# detect your architecture and download
-curl -L https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64 -o neurader
-chmod +x neurader
-sudo mv neurader /usr/local/bin/neurader
+### neurader binary
+A single statically linked Go binary at `/usr/local/bin/neurader`. It sets up the environment via `neurader init` and provides CLI commands to read and push logs. It never runs as a daemon and opens no ports.
 
-# run the setup wizard
-sudo neurader init
-```
+### neurader_callback.py
+A Python callback plugin that Ansible loads automatically before every playbook run. It hooks into Ansible's internal event system and captures every host result in real time. When the playbook finishes it writes a structured JSON file to `/var/log/neurader/`. It runs inside the Ansible process — no subprocess, no network calls, no side effects.
 
-### Download by architecture
+### /var/log/neurader/
+The log directory where every playbook run is stored as a JSON file. Files are named `<playbook>_<date>_<time>.json` and retained for a configurable number of days. The callback plugin writes here directly — the neurader binary reads from here.
 
-| Binary | Architecture | Runs on |
-|---|---|---|
-| `neurader-linux-amd64` | Intel / AMD 64-bit | Most servers, cloud VMs, AWS EC2, GCP, Azure |
-| `neurader-linux-arm64` | ARM 64-bit | AWS Graviton, GCP Tau T2A, Raspberry Pi 4/5, Oracle Ampere |
-| `neurader-linux-arm`   | ARM 32-bit | Raspberry Pi 2/3, older embedded ARM controllers |
-
-Direct links:
-
-```
-https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64
-https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm64
-https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm
-```
-
-### Verify checksum
-
-```bash
-curl -L https://neurader.operman.in/neurader/releases/latest/checksums.sha256 -o checksums.sha256
-sha256sum -c checksums.sha256
-```
-
-### Supported Linux distributions
-
-Works on any distro where Ansible is installed — regardless of how it was installed:
-
-| Install method | Supported |
-|---|---|
-| `apt install ansible` | ✅ Ubuntu, Debian |
-| `dnf install ansible` | ✅ RHEL, CentOS Stream, Rocky, AlmaLinux, Fedora, Amazon Linux 2023 |
-| `yum install ansible` | ✅ Amazon Linux 2, older RHEL/CentOS |
-| `pip install ansible` | ✅ User install (`~/.local`) and system install |
-| `pipx install ansible` | ✅ |
-| `conda install ansible` | ✅ |
+### /etc/neurader/neurader.conf
+The configuration file written by `neurader init`. Stores log retention, Grafana credentials, and detected paths for the callback directory and ansible.cfg.
 
 ---
 
-## Setup
-
-```bash
-sudo neurader init
-```
-
-The setup wizard detects your environment automatically and handles everything:
-
-- Finds your Ansible installation — binary, Python interpreter, and plugin directory
-- Creates `/var/log/neurader/` with correct permissions
-- Creates `/etc/neurader/` and writes `neurader.conf`
-- Installs `neurader_callback.py` into the correct Ansible callback directory
-- Patches `ansible.cfg` to enable the callback
-- Installs a systemd timer (or cron fallback) for automatic log cleanup
-- Optionally connects to Grafana and imports a pre-built dashboard
-
-You never touch a config file or edit `ansible.cfg` manually.
-
----
-
-## Commands
-
-| Command | Root | Description |
-|---|---|---|
-| `neurader init` | ✅ | Setup wizard — run once after install |
-| `neurader list` | ❌ | List all recorded playbook runs, newest first |
-| `neurader show <file>` | ❌ | Show detailed per-host result of a specific run |
-| `neurader status` | ❌ | Show current config and health check |
-| `neurader push` | ❌ | Backfill all existing logs to Grafana |
-| `neurader grafana-setup` | ❌ | Create Grafana datasource and import dashboard |
-| `neurader clean` | ❌ | Delete logs older than retention period |
-| `neurader reset-callback` | ✅ | Restore default callback plugin |
-| `neurader uninstall` | ✅ | Remove neurader completely |
-| `neurader version` | ❌ | Print binary version |
-
----
-
-## Usage
-
-After `neurader init` runs once, everything is automatic:
-
-```bash
-# just run your playbooks as normal
-ansible-playbook site.yml
-
-# then check what happened
-neurader list
-```
-
-Example `neurader list` output:
+## Data flow
 
 ```
-  FILE                              PLAYBOOK    HOSTS   STATUS    STARTED
-  site.yml_2025-01-24_14-30-00     site.yml    3       success   2025-01-24 14:30
-  site.yml_2025-01-23_09-15-42     site.yml    3       failed    2025-01-23 09:15
-  deploy.yml_2025-01-22_18-00-01   deploy.yml  5       success   2025-01-22 18:00
-```
-
-Drill into a specific run:
-
-```bash
-neurader show site.yml_2025-01-23_09-15-42.json
-```
-
-```
-  Playbook : site.yml
-  Started  : 2025-01-23 09:15:42
-  Ended    : 2025-01-23 09:16:01
-  Hosts    : 3 total
-
-  ✓ node1    success   (ok=8 changed=2 skipped=0)
-  ✓ node3    success   (ok=8 changed=2 skipped=0)
-  ✗ node2    FAILED
-    Module : ansible.builtin.command
-    Msg    : Permission denied
-    Stderr : sudo: a password is required
-    RC     : 1
+ansible-playbook runs
+        │
+        ▼
+Ansible loads neurader_callback.py from callback_dir
+        │
+        ▼
+v2_runner_on_ok / v2_runner_on_failed / v2_runner_on_unreachable
+capture each host result as playbook executes
+        │
+        ▼
+v2_playbook_on_stats fires when playbook completes
+        │
+        ▼
+JSON written to /var/log/neurader/<playbook>_<date>_<time>.json
+        │
+        ├──► neurader list     reads log index
+        ├──► neurader show     reads specific log
+        └──► neurader push     sends to Grafana API
 ```
 
 ---
 
-## Log format
+## Log structure
 
-Logs are written to `/var/log/neurader/<playbook>_<date>_<time>.json`:
+Every run produces one JSON file:
 
 ```json
 {
@@ -198,81 +130,41 @@ Logs are written to `/var/log/neurader/<playbook>_<date>_<time>.json`:
 
 ---
 
-## Grafana integration
+## Ansible compatibility
 
-neurader can push logs to a Grafana instance automatically after every playbook run.
+neurader uses the standard Ansible callback interface that has been stable since Ansible 2.0. `neurader init` detects the install method automatically and places the callback plugin in the correct directory.
 
-**One-time setup:**
-
-```bash
-# add Grafana details during init, or edit the config directly
-sudo nano /etc/neurader/neurader.conf
-
-# create datasource and import the pre-built dashboard
-neurader grafana-setup
-
-# backfill any runs that happened before Grafana was connected
-neurader push
-```
-
-**After setup — fully automatic.** Every `ansible-playbook` run pushes to Grafana without any manual steps.
+| Install method | Controller OS | Supported |
+|---|---|---|
+| `apt install ansible` | Ubuntu, Debian | ✅ |
+| `dnf install ansible` | RHEL, Rocky, AlmaLinux, Fedora, Amazon Linux 2023 | ✅ |
+| `yum install ansible` | Amazon Linux 2, older RHEL/CentOS | ✅ |
+| `pip install ansible` | Any Linux | ✅ |
+| `pipx install ansible` | Any Linux | ✅ |
+| `conda install ansible` | Any Linux | ✅ |
 
 ---
 
-## Configuration
+## Binary compatibility
 
-`/etc/neurader/neurader.conf`:
+neurader is a statically linked Go binary — it carries all dependencies inside itself and requires no runtime, no Python, and no system libraries. The same binary runs on Ubuntu 20, Ubuntu 24, Amazon Linux, Alpine, Arch, and any other Linux distro.
 
-```json
-{
-  "retention_days":   3,
-  "grafana_endpoint": "http://grafana.company.com:3000",
-  "grafana_api_key":  "eyJr...",
-  "grafana_org_id":   "1",
-  "log_dir":          "/var/log/neurader",
-  "callback_dir":     "/home/ec2-user/.local/lib/python3.12/site-packages/ansible/plugins/callback",
-  "ansible_cfg_path": "/etc/ansible/ansible.cfg"
-}
-```
-
-All fields are written automatically by `neurader init`. Edit directly to change Grafana credentials or log retention without re-running init.
+| Binary | CPU | Common machines |
+|---|---|---|
+| `neurader-linux-amd64` | x86-64 | Most servers, AWS EC2, GCP, Azure VMs |
+| `neurader-linux-arm64` | ARM 64-bit | AWS Graviton, GCP Tau T2A, Raspberry Pi 4/5 |
+| `neurader-linux-arm`   | ARM 32-bit | Raspberry Pi 2/3, older embedded controllers |
 
 ---
 
-## Customising the callback plugin
+## What neurader does not do
 
-The callback plugin is plain Python installed at `<callback_dir>/neurader_callback.py`. Edit the `v2_playbook_on_stats` method to add or remove fields from the JSON payload.
-
-To restore the default at any time:
-
-```bash
-sudo neurader reset-callback
-```
-
----
-
-## Updating
-
-Just replace the binary — config, logs, and callback plugin are untouched:
-
-```bash
-curl -L https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64 -o neurader-new
-chmod +x neurader-new
-sudo mv neurader-new /usr/local/bin/neurader
-neurader version
-```
-
-No need to re-run `neurader init` after an update.
-
----
-
-## Uninstall
-
-```bash
-sudo neurader uninstall
-```
-
-Removes the callback plugin, reverts `ansible.cfg`, removes the systemd timer, and deletes `/etc/neurader/` and `/var/log/neurader/`.
+- Does not run on managed nodes — controller only
+- Does not open any ports or expose any API
+- Does not run as a background daemon or service
+- Does not modify playbooks or inventory
+- Does not require changes to how you run `ansible-playbook`
+- Does not touch managed nodes in any way
 
 ---
 
