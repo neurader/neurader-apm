@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'      # v1.0.0, v1.2.3  → real release, updates /latest/
+      - 'v*'      
     branches:
       - 'v*'      # v2-testing       → test build, does NOT update /latest/
 
@@ -174,7 +174,7 @@ jobs:
 
             | Architecture | Who uses this | Download |
             |---|---|---|
-            | amd64 | Intel/AMD servers, most cloud VMs | [neurader-linux-amd64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm) |
+            | amd64  | Intel/AMD servers, most cloud VMs | [neurader-linux-amd64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64) |
             | arm64  | AWS Graviton, GCP Tau, Raspberry Pi 4/5 | [neurader-linux-arm64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm64) |
             | arm    | Raspberry Pi 2/3, older embedded devices | [neurader-linux-arm](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm) |
 
