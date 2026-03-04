@@ -8,30 +8,30 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Ansible Controller                        │
-│                                                                  │
-│   ansible-playbook site.yml                                      │
-│          │                                                       │
-│          ▼                                                       │
+│                        Ansible Controller                       │
+│                                                                 │
+│   ansible-playbook site.yml                                     │
+│          │                                                      │
+│          ▼                                                      │
 │   ┌─────────────────────────────────────────────┐               │
-│   │           Ansible Callback System            │               │
-│   │                                              │               │
-│   │   ansible.cfg                                │               │
-│   │   callbacks_enabled = neurader  ◄── patched  │               │
-│   │            │                   by init       │               │
-│   │            ▼                                 │               │
-│   │   neurader_callback.py                       │               │
-│   │   (Python plugin, auto-loaded by Ansible)    │               │
+│   │           Ansible Callback System            │              │
+│   │                                              │              │
+│   │   ansible.cfg                                │              │
+│   │   callbacks_enabled = neurader  ◄── patched  │              │
+│   │            │                   by init       │              │
+│   │            ▼                                 │              │
+│   │   neurader_callback.py                       │              │
+│   │   (Python plugin, auto-loaded by Ansible)    │              │
 │   └─────────────────────────────────────────────┘               │
-│          │                                                       │
-│          │  captures every host result in real time              │
-│          ▼                                                       │
-│   /var/log/neurader/                                             │
+│          │                                                      │
+│          │  captures every host result in real time             │
+│          ▼                                                      │
+│   /var/log/neurader/                                            │
 │   └── site.yml_2025-01-24_14-30-00.json                         │
-│                                                                  │
-│   neurader binary (/usr/local/bin/neurader)                      │
-│   ├── reads logs  →  neurader list / show / status               │
-│   └── pushes logs →  Grafana (optional)                          │
+│                                                                 │
+│   neurader binary (/usr/local/bin/neurader)                     │
+│   ├── reads logs  →  neurader list / show / staus               │
+│   └── pushes logs →  Grafana (optional)                         │
 └─────────────────────────────────────────────────────────────────┘
           │  SSH                │  SSH                │  SSH
           ▼                     ▼                     ▼
@@ -171,3 +171,4 @@ neurader is a statically linked Go binary — it carries all dependencies inside
 ## License
 
 Apache License 2.0
+
