@@ -11,6 +11,7 @@ import (
 	"neurader/internal/grafana"
 	"neurader/internal/logs"
 	"neurader/internal/setup"
+	"neurader/internal/upgrade"
 )
 
 // version is injected at build time via -ldflags "-X main.version=v1.0.0"
@@ -140,6 +141,15 @@ func main() {
 		Short: "Remove neurader completely from this system",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return setup.Uninstall()
+		},
+	})
+
+	// ── neurader upgrade ───────────────────────────────────────────────────
+	root.AddCommand(&cobra.Command{
+		Use:   "upgrade",
+		Short: "Upgrade neurader to the latest version",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return upgrade.Run(version)
 		},
 	})
 

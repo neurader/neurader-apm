@@ -228,6 +228,10 @@ func ResetCallback() error {
 
 // Uninstall removes everything neurader installed from the system.
 func Uninstall() error {
+	if os.Getuid() != 0 {
+		return fmt.Errorf("uninstall must be run as root — try: sudo neurader uninstall")
+	}
+
 	cfg, _ := config.Load()
 
 	reader := bufio.NewReader(os.Stdin)
@@ -282,7 +286,7 @@ func Uninstall() error {
 
 	fmt.Println()
 	greenC.Println("  ✅  Neurader uninstalled.")
-	fmt.Println("  Remove the binary manually: sudo rm /usr/local/bin/neurader")
+	fmt.Println("  Remove the binary manually: sudo rm /usr/bin/neurader")
 	fmt.Println()
 	return nil
 }

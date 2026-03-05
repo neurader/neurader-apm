@@ -59,7 +59,7 @@ func removeSystemdUnits() {
 
 const (
 	cronMark = "# neurader log cleanup"
-	cronLine = "0 */12 * * * /usr/local/bin/neurader clean > /dev/null 2>&1"
+	cronLine = "0 */12 * * * /usr/bin/neurader clean > /dev/null 2>&1"
 )
 
 func installCronJob() error {
