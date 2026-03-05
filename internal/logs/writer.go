@@ -49,9 +49,11 @@ var safeFilename = regexp.MustCompile(`[^\w\-.]`)
 // Filename format: <playbook>_<YYYY-MM-DD>_<HH-MM-SS>.json
 // Returns the full path of the written file.
 func Write(logDir string, run PlaybookRun) (string, error) {
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0777); err != nil {
 		return "", fmt.Errorf("creating log dir: %w", err)
 	}
+	// ensure permissions are correct even if dir already existed with wrong perms
+	os.Chmod(logDir, 0777) //nolint:errcheck
 
 	safe := safeFilename.ReplaceAllString(run.Playbook, "_")
 	timestamp := time.Now().UTC().Format("2006-01-02_15-04-05")
