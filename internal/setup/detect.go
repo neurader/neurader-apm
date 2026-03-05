@@ -103,16 +103,62 @@ func PrintDetectionReport(info SystemInfo) {
 
 func detectRealUser() (username, homeDir string) {
 	// sudo sets SUDO_USER to the original calling user
+	// e.g. ec2-user runs: sudo neurader init → SUDO_USER=ec2-user
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" && sudoUser != "root" {
 		if u, err := user.Lookup(sudoUser); err == nil {
 			return u.Username, u.HomeDir
 		}
 	}
+
+	// No SUDO_USER — either running as normal user or logged in directly as root.
+	// If current user is not root, use them directly.
 	if u, err := user.Current(); err == nil {
-		return u.Username, u.HomeDir
+		if u.Uid != "0" {
+			return u.Username, u.HomeDir
+		}
 	}
+
+	// Running directly as root (ssh root@server or su -).
+	// SUDO_USER is not set so we don't know who the real user is.
+	// Scan /home/* to find a user who has Ansible installed — that is
+	// almost certainly the user who owns this Ansible controller.
+	if found := findAnsibleUser(); found != nil {
+		return found.Username, found.HomeDir
+	}
+
+	// Absolute fallback
 	home, _ := os.UserHomeDir()
 	return os.Getenv("USER"), home
+}
+
+// findAnsibleUser scans all home directories under /home/ and returns
+// the first user who has Ansible installed via pip or pipx.
+// Used when running directly as root with no SUDO_USER set.
+func findAnsibleUser() *user.User {
+	entries, err := os.ReadDir("/home")
+	if err != nil {
+		return nil
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		homeDir := "/home/" + e.Name()
+		// Check common pip and pipx install locations
+		ansiblePaths := []string{
+			homeDir + "/.local/bin/ansible",
+			homeDir + "/.local/pipx/venvs/ansible/bin/ansible",
+		}
+		for _, p := range ansiblePaths {
+			if _, err := os.Stat(p); err == nil {
+				// Found ansible — look up this user
+				if u, err := user.Lookup(e.Name()); err == nil {
+					return u
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // ── ansible --version parser ─────────────────────────────────────────────────
@@ -214,6 +260,24 @@ func detectAnsibleBin(realHome string) string {
 	}
 	if path, err := exec.LookPath("ansible"); err == nil {
 		return path
+	}
+	// Last resort — scan all home directories
+	// Handles: root running neurader init directly without sudo
+	if entries, err := os.ReadDir("/home"); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			for _, suffix := range []string{
+				"/.local/bin/ansible",
+				"/.local/pipx/venvs/ansible/bin/ansible",
+			} {
+				p := "/home/" + e.Name() + suffix
+				if _, err := os.Stat(p); err == nil {
+					return p
+				}
+			}
+		}
 	}
 	return ""
 }
