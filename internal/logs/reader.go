@@ -46,14 +46,17 @@ func List(logDir string) error {
 	// invisible bytes that throw off column width calculations. Fix: use
 	// fmt.Printf with fixed-width format strings instead of tabwriter,
 	// and apply color AFTER padding so column widths are always consistent.
-	fmt.Println()
-	fmt.Printf("  %-19s  %-20s  %-5s  %-7s  %-6s  %s\n",
-		boldF("TIMESTAMP"), boldF("PLAYBOOK"),
-		boldF("HOSTS"), boldF("SUCCESS"), boldF("FAILED"), boldF("FILE"))
-	fmt.Printf("  %-19s  %-20s  %-5s  %-7s  %-6s  %s\n",
+	// Headers use a plain format string first, then bold is applied to the
+	// entire pre-formatted string so padding is never affected by ANSI codes.
+	header := fmt.Sprintf("  %-19s  %-20s  %-5s  %-7s  %-6s  %s",
+		"TIMESTAMP", "PLAYBOOK", "HOSTS", "SUCCESS", "FAILED", "FILE")
+	sep := fmt.Sprintf("  %-19s  %-20s  %-5s  %-7s  %-6s  %s",
 		"───────────────────", "────────────────────",
 		"─────", "───────", "──────",
 		"──────────────────────────────────────")
+	fmt.Println()
+	fmt.Println(boldF(header))
+	fmt.Println(sep)
 
 	for _, m := range metas {
 		// Format numbers at fixed width BEFORE colorizing
