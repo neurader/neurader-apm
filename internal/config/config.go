@@ -49,6 +49,20 @@ func Load() (Config, error) {
 		return cfg, fmt.Errorf("parsing config %s: %w", ConfigFile, err)
 	}
 
+	// Validate critical fields — catch manually edited configs with missing values
+	if cfg.LogDir == "" {
+		cfg.LogDir = LogDir
+	}
+	if cfg.RetentionDays < 1 {
+		cfg.RetentionDays = 3
+	}
+	if cfg.CallbackDir == "" {
+		return cfg, fmt.Errorf("config is missing callback_dir — run: sudo neurader init")
+	}
+	if cfg.AnsibleCfgPath == "" {
+		return cfg, fmt.Errorf("config is missing ansible_cfg_path — run: sudo neurader init")
+	}
+
 	return cfg, nil
 }
 
