@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -224,12 +225,23 @@ func copyFile(src, dst string) error {
 }
 
 // isNewer returns true if candidate is a newer semver than current.
-// Simple string comparison works for vMAJOR.MINOR.PATCH format.
+// Compares MAJOR.MINOR.PATCH numerically so v0.10.0 > v0.9.0 correctly.
 func isNewer(candidate, current string) bool {
-	// Strip leading 'v'
-	c := strings.TrimPrefix(candidate, "v")
-	cur := strings.TrimPrefix(current, "v")
-	return c > cur
+	return parseSemver(candidate) > parseSemver(current)
+}
+
+// parseSemver converts "v1.2.3" into a single integer 001002003
+// for easy numeric comparison. Supports up to 999 per component.
+func parseSemver(v string) int {
+	v = strings.TrimPrefix(v, "v")
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return 0
+	}
+	major, _ := strconv.Atoi(parts[0])
+	minor, _ := strconv.Atoi(parts[1])
+	patch, _ := strconv.Atoi(parts[2])
+	return major*1_000_000 + minor*1_000 + patch
 }
 
 // formatBytes returns a human-readable byte size string.
