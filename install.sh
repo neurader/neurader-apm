@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ────────────────────────────────────────────────────────────────────────────
 # neurader installer
-# Usage: curl -L https://neurader.operman.in/neurader/install.sh | sudo bash
+# Usage: curl -L https://neurader.operman.in/neurader/install.sh | sudo bash |
 # ────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -170,3 +170,4 @@ echo -e "  ${DIM}Then run any ansible-playbook command as normal.${RESET}"
 echo -e "  ${DIM}View runs : neurader list${RESET}"
 echo -e "  ${DIM}Inspect   : neurader show <filename>${RESET}"
 echo ""
+
