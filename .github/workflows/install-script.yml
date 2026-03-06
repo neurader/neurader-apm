@@ -1,17 +1,18 @@
-name: Deploy install.sh
+name: Deploy install scripts
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'install.sh'    # only runs when install.sh is changed — nothing else triggers this
+      - 'scripts/install.sh'
+      - 'scripts/loki-node-setup.sh'
 
 permissions:
   contents: read
 
 jobs:
-  deploy-install-script:
+  deploy-scripts:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,20 +29,25 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ secrets.AWS_REGION }}
 
-      # ── 3. Upload install.sh to S3 ────────────────────────────────────────
-      - name: Upload install.sh to S3
+      # ── 3. Upload changed scripts to S3 ───────────────────────────────────
+      # Only runs when install.sh or loki-node-setup.sh changes in main.
+      # Both files are always synced so S3 is never out of date.
+      - name: Upload scripts to S3
         run: |
-          aws s3 cp install.sh s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/install.sh \
+          aws s3 cp scripts/install.sh s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/install.sh \
             --content-type "text/x-shellscript" \
             --content-disposition "attachment; filename=install.sh"
+          echo "✓ install.sh uploaded"
 
-          echo "✓ install.sh → s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/install.sh"
+          aws s3 cp scripts/loki-node-setup.sh s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/loki-node-setup.sh \
+            --content-type "text/x-shellscript" \
+            --content-disposition "attachment; filename=loki-node-setup.sh"
+          echo "✓ loki-node-setup.sh uploaded"
 
       # ── 4. Invalidate CloudFront cache ────────────────────────────────────
       - name: Invalidate CloudFront
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/neurader/releases/install.sh"
-
+            --paths "/neurader/releases/install.sh" "/neurader/releases/loki-node-setup.sh"
           echo "✓ CloudFront cache invalidated"

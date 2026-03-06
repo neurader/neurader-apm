@@ -9,6 +9,7 @@ import (
 
 	"neurader/internal/config"
 	"neurader/internal/grafana"
+	"neurader/internal/loki"
 	"neurader/internal/logs"
 	"neurader/internal/setup"
 	"neurader/internal/upgrade"
@@ -43,8 +44,8 @@ func main() {
 				return err
 			}
 			logs.Clean(cfg.LogDir, cfg.RetentionDays)
-			if cfg.GrafanaEndpoint != "" {
-				return grafana.PushLatest(cfg)
+			if cfg.LokiEndpoint != "" {
+				return loki.PushLatest(cfg)
 			}
 			return nil
 		},
@@ -100,14 +101,16 @@ func main() {
 			if err != nil {
 				return err
 			}
-			return grafana.PushAll(cfg)
+			return loki.PushAll(cfg)
 		},
 	})
 
-	// ── neurader grafana-setup ─────────────────────────────────────────────
+	// ── neurader loki-setup ──────────────────────────────────────────────
+	// Installs Loki on the Grafana node (if SSH configured), creates the
+	// Loki datasource in Grafana, and imports the Neurader dashboard.
 	root.AddCommand(&cobra.Command{
-		Use:   "grafana-setup",
-		Short: "Create datasource and import dashboard in Grafana",
+		Use:   "loki-setup",
+		Short: "Install Loki, create datasource and import dashboard into Grafana",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {

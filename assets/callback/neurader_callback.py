@@ -18,8 +18,9 @@ DOCUMENTATION = '''
       - Writes a structured JSON log file after each playbook run.
       - Captures per-host status (success / failed / unreachable).
       - Failed hosts include full error output: msg, stdout, stderr, rc, module.
+      - Automatically pushes logs to Loki after each run (if configured).
     requirements:
-      - neurader binary installed at /usr/local/bin/neurader
+      - neurader binary installed at /usr/bin/neurader
 '''
 
 # Must be False — neurader is enabled via callbacks_enabled in ansible.cfg.
@@ -33,6 +34,7 @@ import datetime
 import json
 import os
 import re
+import shutil
 import subprocess
 
 
@@ -51,9 +53,31 @@ def _load_config():
     return defaults
 
 
+def _find_neurader_bin():
+    """Locate the neurader binary.
+
+    Search order:
+      1. /usr/bin/neurader          — standard install path (v0.2.0+)
+      2. /usr/local/bin/neurader    — legacy install path (v0.1.x)
+      3. shutil.which('neurader')   — any other location in PATH
+    """
+    candidates = [
+        '/usr/bin/neurader',
+        '/usr/local/bin/neurader',
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    # Fall back to PATH lookup
+    found = shutil.which('neurader')
+    if found:
+        return found
+    return None
+
+
 _CFG          = _load_config()
 LOG_DIR       = _CFG.get('log_dir', '/var/log/neurader')
-NEURADER_BIN  = '/usr/local/bin/neurader'
+NEURADER_BIN  = _find_neurader_bin()
 SAFE_FILENAME = re.compile(r'[^\w\-.]')
 
 
@@ -165,7 +189,7 @@ class CallbackModule(CallbackBase):
             self._display.display(
                 '[neurader] Run logged → {}'.format(log_path))
 
-        # Fire-and-forget: neurader post-run handles cleanup + Grafana push
+        # Fire-and-forget: neurader post-run writes to Loki automatically
         self._trigger_post_run()
 
     # ── Internal helpers ──────────────────────────────────────────────────
@@ -186,14 +210,21 @@ class CallbackModule(CallbackBase):
             return None
 
     def _trigger_post_run(self):
-        """Invoke `neurader post-run` in the background (non-blocking)."""
+        """Invoke `neurader post-run` in the background (non-blocking).
+
+        post-run runs asynchronously so it never blocks the playbook output.
+        It handles: log retention cleanup + Loki push (if loki_endpoint is set).
+        """
+        if not NEURADER_BIN:
+            self._display.warning(
+                '[neurader] binary not found — skipping post-run (Loki push)')
+            return
         try:
-            if os.path.isfile(NEURADER_BIN):
-                subprocess.Popen(
-                    [NEURADER_BIN, 'post-run'],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+            subprocess.Popen(
+                [NEURADER_BIN, 'post-run'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except Exception as exc:
             self._display.warning(
                 '[neurader] post-run trigger failed: {}'.format(exc))

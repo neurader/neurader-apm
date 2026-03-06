@@ -14,26 +14,35 @@ const (
 
 // Config holds all neurader settings persisted to /etc/neurader/neurader.conf
 type Config struct {
-	RetentionDays   int    `json:"retention_days"`   // how many days to keep log files
-	GrafanaEndpoint string `json:"grafana_endpoint"` // e.g. http://grafana:3000
-	GrafanaAPIKey   string `json:"grafana_api_key"`  // Grafana service account token
-	GrafanaOrgID    string `json:"grafana_org_id"`   // Grafana org ID, default "1"
-	LogDir          string `json:"log_dir"`          // default /var/log/neurader
-	CallbackDir     string `json:"callback_dir"`     // detected ansible callback plugin dir
-	AnsibleCfgPath  string `json:"ansible_cfg_path"` // path to ansible.cfg that was patched
+	RetentionDays  int    `json:"retention_days"`   // how many days to keep log files
+	LogDir         string `json:"log_dir"`           // default /var/log/neurader
+	CallbackDir    string `json:"callback_dir"`      // detected ansible callback plugin dir
+	AnsibleCfgPath string `json:"ansible_cfg_path"`  // path to ansible.cfg that was patched
+
+	// Loki integration (optional)
+	// Scenario 1: bare EC2/VM  → http://<loki-server-ip>:3100
+	// Scenario 2: k8s ingress  → https://loki.company.com
+	// Scenario 3: Grafana Cloud → https://logs-prod-xxx.grafana.net
+	LokiEndpoint string `json:"loki_endpoint"` // Loki push endpoint base URL
+	LokiUsername string `json:"loki_username"` // basic auth username (Grafana Cloud / k8s)
+	LokiPassword string `json:"loki_password"` // basic auth password or API key
+
+	// Legacy Grafana fields — kept for backward compatibility so existing
+	// neurader.conf files do not break on upgrade to v0.3.0
+	GrafanaEndpoint string `json:"grafana_endpoint,omitempty"`
+	GrafanaAPIKey   string `json:"grafana_api_key,omitempty"`
+	GrafanaOrgID    string `json:"grafana_org_id,omitempty"`
 }
 
 // Defaults returns a Config with sensible defaults.
 func Defaults() Config {
 	return Config{
 		RetentionDays: 3,
-		GrafanaOrgID:  "1",
 		LogDir:        LogDir,
 	}
 }
 
 // Load reads /etc/neurader/neurader.conf.
-// Returns defaults + a clear error message if the file does not exist.
 func Load() (Config, error) {
 	cfg := Defaults()
 
@@ -49,7 +58,7 @@ func Load() (Config, error) {
 		return cfg, fmt.Errorf("parsing config %s: %w", ConfigFile, err)
 	}
 
-	// Validate critical fields — catch manually edited configs with missing values
+	// Validate critical fields
 	if cfg.LogDir == "" {
 		cfg.LogDir = LogDir
 	}
@@ -66,7 +75,7 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-// Save writes cfg to /etc/neurader/neurader.conf with mode 0600 (root-only readable).
+// Save writes cfg to /etc/neurader/neurader.conf
 func Save(cfg Config) error {
 	if err := os.MkdirAll(ConfigDir, 0755); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
@@ -75,9 +84,5 @@ func Save(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	// 0644 — readable by all users so non-root commands (neurader list,
-	// neurader show, neurader status) work without sudo.
-	// The Grafana API key is stored here — if that is a concern, users can
-	// manually chmod 0600 after init.
 	return os.WriteFile(ConfigFile, data, 0644)
 }
