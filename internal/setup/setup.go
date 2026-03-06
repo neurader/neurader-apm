@@ -79,6 +79,8 @@ func Run() error {
 
 	lokiEndpoint := prompt(reader, "  Loki endpoint (leave blank to skip)", "")
 	var lokiUsername, lokiPassword string
+	var grafanaEndpoint, grafanaAPIKey string
+	var lokiSSHHost, lokiSSHUser, lokiSSHKey, lokiSSHPort string
 	if lokiEndpoint != "" {
 		fmt.Println()
 		fmt.Println("  Basic auth — leave blank if Loki has no auth (bare EC2/VM).")
@@ -87,18 +89,39 @@ func Run() error {
 		if lokiUsername != "" {
 			lokiPassword = prompt(reader, "  Loki password / API key", "")
 		}
+		fmt.Println()
+		fmt.Println("  Grafana — needed for auto dashboard import via: neurader loki-setup")
+		grafanaEndpoint = prompt(reader, "  Grafana endpoint (leave blank to skip)", "")
+		if grafanaEndpoint != "" {
+			grafanaAPIKey = prompt(reader, "  Grafana service account token (Admin role)", "")
+		}
+		fmt.Println()
+		fmt.Println("  SSH install — neurader can install Loki automatically on your Grafana EC2/VM.")
+		fmt.Println("  Leave blank if Loki is already running (k8s, Grafana Cloud, manual install).")
+		lokiSSHHost = prompt(reader, "  Grafana/Loki node IP or hostname (or blank)", "")
+		if lokiSSHHost != "" {
+			lokiSSHUser = prompt(reader, "  SSH user", "ec2-user")
+			lokiSSHKey  = prompt(reader, "  SSH private key path", "~/.ssh/id_rsa")
+			lokiSSHPort = prompt(reader, "  SSH port", "22")
+		}
 	}
 
 	// ── Step 4: Write config ──────────────────────────────────────────────
 	stepHeader(4, "Writing config → "+config.ConfigFile)
 	cfg := config.Config{
-		RetentionDays:  retentionDays,
-		LokiEndpoint:   lokiEndpoint,
-		LokiUsername:   lokiUsername,
-		LokiPassword:   lokiPassword,
-		LogDir:         config.LogDir,
-		CallbackDir:    info.CallbackDir,
-		AnsibleCfgPath: info.AnsibleCfgPath,
+		RetentionDays:   retentionDays,
+		LokiEndpoint:    lokiEndpoint,
+		LokiUsername:    lokiUsername,
+		LokiPassword:    lokiPassword,
+		GrafanaEndpoint: grafanaEndpoint,
+		GrafanaAPIKey:   grafanaAPIKey,
+		LokiSSHHost:     lokiSSHHost,
+		LokiSSHUser:     lokiSSHUser,
+		LokiSSHKey:      lokiSSHKey,
+		LokiSSHPort:     lokiSSHPort,
+		LogDir:          config.LogDir,
+		CallbackDir:     info.CallbackDir,
+		AnsibleCfgPath:  info.AnsibleCfgPath,
 	}
 	if err := config.Save(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
@@ -178,8 +201,7 @@ func Status() error {
 
 	if cfg.GrafanaEndpoint != "" {
 		fmt.Printf("  Grafana endpoint : %s\n", cfg.GrafanaEndpoint)
-		fmt.Printf("  Grafana org      : %s\n", cfg.GrafanaOrgID)
-	} else {
+			} else {
 		fmt.Println("  Grafana          : not configured")
 	}
 
