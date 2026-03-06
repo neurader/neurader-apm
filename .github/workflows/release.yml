@@ -3,9 +3,9 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'      # v0.2.0 → full release, updates /latest/
+      - 'v*'        # tag push → full release, updates /latest/
     branches:
-      - 'v*'      # v-testing → test build only, does NOT update /latest/
+      - main        # merge to main → check if merged branch was v*, then release
 
 permissions:
   contents: write
@@ -19,42 +19,68 @@ jobs:
       # ── 1. Checkout ──────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # ── 2. Go setup ──────────────────────────────────────────────────────
+      # ── 2. Check trigger ──────────────────────────────────────────────────
+      # Tag push (v*)        → SHOULD_RUN=true,  IS_TAG=true,  VERSION=v0.2.2
+      # Merge v* → main      → SHOULD_RUN=true,  IS_TAG=false, VERSION=v0.2.2
+      # Direct push to main  → SHOULD_RUN=false  (skip everything)
+      # Merge non-v* → main  → SHOULD_RUN=false  (skip everything)
+      - name: Check trigger
+        run: |
+          SHOULD_RUN=false
+          IS_TAG=false
+          VERSION=""
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Tag push — full release
+            VERSION="${GITHUB_REF_NAME}"
+            IS_TAG=true
+            SHOULD_RUN=true
+            echo "Triggered by tag: ${VERSION}"
+
+          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            # Push to main — only proceed if it was a merge from a v* branch
+            MERGE_BRANCH=$(git log -1 --pretty=%s \
+              | grep -oP "(?<=Merge branch ')[^']+" || true)
+            echo "Merged branch: '${MERGE_BRANCH}'"
+
+            if [[ "${MERGE_BRANCH}" == v* ]]; then
+              VERSION="${MERGE_BRANCH}"
+              IS_TAG=false
+              SHOULD_RUN=true
+              echo "Triggered by merge of v* branch: ${VERSION}"
+            else
+              echo "Not a v* branch merge — skipping."
+            fi
+          fi
+
+          echo "SHOULD_RUN=${SHOULD_RUN}" >> $GITHUB_ENV
+          echo "IS_TAG=${IS_TAG}"         >> $GITHUB_ENV
+          echo "VERSION=${VERSION}"       >> $GITHUB_ENV
+
+      # ── 3. Set up Go ─────────────────────────────────────────────────────
       - name: Set up Go
+        if: env.SHOULD_RUN == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           cache: true
 
-      # ── 3. Download dependencies ─────────────────────────────────────────
+      # ── 4. Download dependencies ─────────────────────────────────────────
       - name: Download dependencies
+        if: env.SHOULD_RUN == 'true'
         run: go mod tidy
 
-      # ── 4. Run tests ─────────────────────────────────────────────────────
+      # ── 5. Run tests ─────────────────────────────────────────────────────
       - name: Run tests
+        if: env.SHOULD_RUN == 'true'
         run: go test ./...
 
-      # ── 5. Resolve version ────────────────────────────────────────────────
-      # Tag   → v0.2.0
-      # Branch → v-testing-a3f9c12  (branch name + short commit hash)
-      - name: Resolve version
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION="${GITHUB_REF_NAME}"
-            IS_TAG=true
-          else
-            SHORT_SHA=$(git rev-parse --short HEAD)
-            VERSION="${GITHUB_REF_NAME}-${SHORT_SHA}"
-            IS_TAG=false
-          fi
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "IS_TAG=${IS_TAG}"   >> $GITHUB_ENV
-          echo "Building: ${VERSION} (is_tag=${IS_TAG})"
-
       # ── 6. Build 3 binaries ───────────────────────────────────────────────
-      # Named amd64 / arm64 / arm — consistent with Go and Docker naming
       - name: Build binaries
+        if: env.SHOULD_RUN == 'true'
         run: |
           mkdir -p dist
 
@@ -81,6 +107,7 @@ jobs:
 
       # ── 7. Generate checksums ─────────────────────────────────────────────
       - name: Generate checksums
+        if: env.SHOULD_RUN == 'true'
         run: |
           cd dist
           sha256sum \
@@ -93,6 +120,7 @@ jobs:
 
       # ── 8. Configure AWS credentials ─────────────────────────────────────
       - name: Configure AWS credentials
+        if: env.SHOULD_RUN == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -100,22 +128,21 @@ jobs:
           aws-region:            ${{ secrets.AWS_REGION }}
 
       # ── 9. Upload versioned copy to S3 ────────────────────────────────────
-      # s3://bucket/releases/v1.0.0/   ← permanent, never overwritten
-      # s3://bucket/releases/v2-test-a3f9c12/  ← branch test build
+      # tag push   → s3://bucket/neurader/releases/v0.2.2/
+      # branch merge → s3://bucket/neurader/releases/v0.2.2/
       - name: Upload versioned release to S3
+        if: env.SHOULD_RUN == 'true'
         run: |
           S3="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/${{ env.VERSION }}"
 
           aws s3 cp dist/neurader-linux-amd64  ${S3}/neurader-linux-amd64  --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-amd64"
-          aws s3 cp dist/neurader-linux-arm64   ${S3}/neurader-linux-arm64   --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm64"
-          aws s3 cp dist/neurader-linux-arm     ${S3}/neurader-linux-arm     --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm"
-          aws s3 cp dist/checksums.sha256       ${S3}/checksums.sha256       --no-progress
+          aws s3 cp dist/neurader-linux-arm64  ${S3}/neurader-linux-arm64  --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm64"
+          aws s3 cp dist/neurader-linux-arm    ${S3}/neurader-linux-arm    --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm"
+          aws s3 cp dist/checksums.sha256      ${S3}/checksums.sha256      --no-progress
 
           echo "✓ Versioned → ${S3}/"
 
       # ── 10. Update /latest/ — ONLY for real tags ──────────────────────────
-      # Branch builds never touch /latest/ so website always shows
-      # a stable release, not an experimental branch build.
       - name: Update latest folder
         if: env.IS_TAG == 'true'
         run: |
@@ -123,15 +150,13 @@ jobs:
           DST="s3://${{ secrets.S3_BUCKET_NAME }}/neurader/releases/latest"
 
           aws s3 cp ${SRC}/neurader-linux-amd64  ${DST}/neurader-linux-amd64  --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-amd64"
-          aws s3 cp ${SRC}/neurader-linux-arm64   ${DST}/neurader-linux-arm64   --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm64"
-          aws s3 cp ${SRC}/neurader-linux-arm     ${DST}/neurader-linux-arm     --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm"
-          aws s3 cp ${SRC}/checksums.sha256       ${DST}/checksums.sha256       --no-progress
+          aws s3 cp ${SRC}/neurader-linux-arm64  ${DST}/neurader-linux-arm64  --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm64"
+          aws s3 cp ${SRC}/neurader-linux-arm    ${DST}/neurader-linux-arm    --no-progress --content-type "application/octet-stream" --content-disposition "attachment; filename=neurader-linux-arm"
+          aws s3 cp ${SRC}/checksums.sha256      ${DST}/checksums.sha256      --no-progress
 
           echo "✓ Latest updated → ${DST}/"
 
       # ── 11. Update version.json — ONLY for real tags ──────────────────────
-      # Website fetches this to display current version number dynamically.
-      # https://neurader.operman.in/neurader/releases/version.json
       - name: Update version.json
         if: env.IS_TAG == 'true'
         run: |
@@ -146,8 +171,6 @@ jobs:
           echo "✓ version.json → ${{ env.VERSION }}"
 
       # ── 12. Invalidate CloudFront cache — ONLY for real tags ──────────────
-      # Forces users to get the new binary immediately.
-      # Only /latest/* needs invalidation — versioned paths never change.
       - name: Invalidate CloudFront cache
         if: env.IS_TAG == 'true'
         run: |
@@ -158,8 +181,6 @@ jobs:
           echo "✓ CloudFront cache invalidated"
 
       # ── 13. Create GitHub Release — ONLY for real tags ────────────────────
-      # No binaries attached — just a changelog marker page on GitHub.
-      # All actual downloads come from S3 via CloudFront.
       - name: Create GitHub Release
         if: env.IS_TAG == 'true'
         uses: softprops/action-gh-release@v2
@@ -180,10 +201,7 @@ jobs:
 
             ### Install
             ```bash
-            curl -L https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64 -o neurader
-            chmod +x neurader
-            sudo mv neurader /usr/bin/neurader
-            sudo neurader init
+            curl -L https://neurader.operman.in/neurader/releases/install.sh | sudo bash
             ```
 
             ### Verify checksum
