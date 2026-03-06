@@ -1,0 +1,47 @@
+name: Deploy install.sh
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'install.sh'    # only runs when install.sh is changed — nothing else triggers this
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-install-script:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ── 1. Checkout ──────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Configure AWS credentials ─────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      # ── 3. Upload install.sh to S3 ────────────────────────────────────────
+      - name: Upload install.sh to S3
+        run: |
+          aws s3 cp install.sh s3://${{ secrets.S3_BUCKET }}/neurader/install.sh \
+            --content-type "text/x-shellscript" \
+            --content-disposition "attachment; filename=install.sh"
+
+          echo "✓ install.sh uploaded to s3://${{ secrets.S3_BUCKET }}/neurader/install.sh"
+
+      # ── 4. Invalidate CloudFront cache ────────────────────────────────────
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/neurader/install.sh"
+
+          echo "✓ CloudFront cache invalidated"
