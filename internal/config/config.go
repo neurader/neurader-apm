@@ -27,11 +27,16 @@ type Config struct {
 	LokiUsername string `json:"loki_username"` // basic auth username (Grafana Cloud / k8s)
 	LokiPassword string `json:"loki_password"` // basic auth password or API key
 
-	// Legacy Grafana fields — kept for backward compatibility so existing
-	// neurader.conf files do not break on upgrade to v0.3.0
-	GrafanaEndpoint string `json:"grafana_endpoint,omitempty"`
-	GrafanaAPIKey   string `json:"grafana_api_key,omitempty"`
-	GrafanaOrgID    string `json:"grafana_org_id,omitempty"`
+	// Grafana integration (for dashboard import via loki-setup)
+	GrafanaEndpoint string `json:"grafana_endpoint"` // e.g. http://grafana-ip:3000
+	GrafanaAPIKey   string `json:"grafana_api_key"`  // service account token (Admin role)
+
+	// SSH config for auto-installing Loki on EC2/VM via loki-setup
+	// Leave blank if Loki is already running (k8s, Grafana Cloud, etc.)
+	LokiSSHHost string `json:"loki_ssh_host"` // IP or hostname of Grafana/Loki node
+	LokiSSHUser string `json:"loki_ssh_user"` // SSH user, default: ec2-user
+	LokiSSHKey  string `json:"loki_ssh_key"`  // path to private key, default: ~/.ssh/id_rsa
+	LokiSSHPort string `json:"loki_ssh_port"` // SSH port, default: 22
 }
 
 // Defaults returns a Config with sensible defaults.
