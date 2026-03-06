@@ -14,7 +14,7 @@ import (
 
 	"neurader/assets"
 	"neurader/internal/config"
-	"neurader/internal/grafana"
+	"neurader/internal/loki"
 )
 
 var (
@@ -77,23 +77,28 @@ func Run() error {
 		retentionDays = 3
 	}
 
-	grafanaEndpoint := prompt(reader, "  Grafana endpoint (leave blank to skip)", "")
-	var grafanaAPIKey, grafanaOrgID string
-	if grafanaEndpoint != "" {
-		grafanaAPIKey = prompt(reader, "  Grafana API key", "")
-		grafanaOrgID = prompt(reader, "  Grafana Org ID", "1")
+	lokiEndpoint := prompt(reader, "  Loki endpoint (leave blank to skip)", "")
+	var lokiUsername, lokiPassword string
+	if lokiEndpoint != "" {
+		fmt.Println()
+		fmt.Println("  Basic auth — leave blank if Loki has no auth (bare EC2/VM).")
+		fmt.Println("  Required for: Grafana Cloud, k8s with auth, nginx-protected Loki.")
+		lokiUsername = prompt(reader, "  Loki username (or blank)", "")
+		if lokiUsername != "" {
+			lokiPassword = prompt(reader, "  Loki password / API key", "")
+		}
 	}
 
 	// ── Step 4: Write config ──────────────────────────────────────────────
 	stepHeader(4, "Writing config → "+config.ConfigFile)
 	cfg := config.Config{
-		RetentionDays:   retentionDays,
-		GrafanaEndpoint: grafanaEndpoint,
-		GrafanaAPIKey:   grafanaAPIKey,
-		GrafanaOrgID:    grafanaOrgID,
-		LogDir:          config.LogDir,
-		CallbackDir:     info.CallbackDir,
-		AnsibleCfgPath:  info.AnsibleCfgPath,
+		RetentionDays:  retentionDays,
+		LokiEndpoint:   lokiEndpoint,
+		LokiUsername:   lokiUsername,
+		LokiPassword:   lokiPassword,
+		LogDir:         config.LogDir,
+		CallbackDir:    info.CallbackDir,
+		AnsibleCfgPath: info.AnsibleCfgPath,
 	}
 	if err := config.Save(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
@@ -128,15 +133,15 @@ func Run() error {
 		printOK("Cleanup scheduler installed (runs every 12 hours)")
 	}
 
-	// ── Step 8: Grafana (optional) ────────────────────────────────────────
-	if grafanaEndpoint != "" {
-		stepHeader(8, "Configuring Grafana")
-		if err := grafana.Setup(cfg); err != nil {
-			printWarn("Grafana setup failed: %v", err)
-			printWarn("Retry anytime with: neurader grafana-setup")
+	// ── Step 8: Loki connection test (optional) ──────────────────────────
+	if lokiEndpoint != "" {
+		stepHeader(8, "Testing Loki connection")
+		if err := loki.Ping(cfg); err != nil {
+			printWarn("Cannot reach Loki: %v", err)
+			printWarn("Check endpoint and auth. Retry anytime with: neurader loki-setup")
 		} else {
-			printOK("Datasource created")
-			printOK("Dashboard imported")
+			printOK("Loki reachable at %s", lokiEndpoint)
+			printOK("Logs will push automatically after each playbook run")
 		}
 	}
 
@@ -150,7 +155,7 @@ func Run() error {
 	fmt.Println("  • View runs  :  neurader list")
 	fmt.Println("  • Inspect run:  neurader show <filename>")
 	fmt.Println("  • Health     :  neurader status")
-	if grafanaEndpoint != "" {
+	if lokiEndpoint != "" {
 		fmt.Println("  • Push manual:  neurader push")
 	}
 	fmt.Println()

@@ -13,8 +13,8 @@ var systemdService []byte
 //go:embed systemd/neurader-cleanup.timer
 var systemdTimer []byte
 
-//go:embed grafana/dashboard.json
-var grafanaDashboard []byte
+//go:embed loki/dashboard.json
+var lokiDashboard []byte
 
 // CallbackPlugin returns the Ansible callback plugin Python source.
 func CallbackPlugin() ([]byte, error) { return callbackPlugin, nil }
@@ -25,5 +25,5 @@ func SystemdService() ([]byte, error) { return systemdService, nil }
 // SystemdTimer returns the systemd timer unit file.
 func SystemdTimer() ([]byte, error) { return systemdTimer, nil }
 
-// GrafanaDashboard returns the pre-built Grafana dashboard JSON.
-func GrafanaDashboard() ([]byte, error) { return grafanaDashboard, nil }
+// LokiDashboard returns the pre-built Grafana dashboard JSON (Loki datasource).
+func LokiDashboard() ([]byte, error) { return lokiDashboard, nil }
