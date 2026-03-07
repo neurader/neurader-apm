@@ -199,13 +199,13 @@ fi
 # ── Verify Loki is running ────────────────────────────────────────────────────
 step "[9] Verifying Loki"
 sleep 3
-for i in 1 2 3 4 5; do
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${LOKI_PORT}/ready" 2>/dev/null || echo "000")
   if [[ "$STATUS" == "200" ]]; then
     ok "Loki is ready at http://localhost:${LOKI_PORT}"
     break
   fi
-  info "Waiting for Loki to start... (${i}/5)"
+  info "Waiting for Loki to start... (${i}/15)"
   sleep 2
 done
 
