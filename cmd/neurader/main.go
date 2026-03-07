@@ -95,7 +95,7 @@ func main() {
 	// ── neurader push ──────────────────────────────────────────────────────
 	root.AddCommand(&cobra.Command{
 		Use:   "push",
-		Short: "Push all logs to Grafana",
+		Short: "Push all logs to Loki",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -181,4 +181,5 @@ func banner() string {
 ╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝
 
 Ansible Execution Monitor`
+
 }
