@@ -1,20 +1,28 @@
 {
-  "title": "Neurader — Ansible Execution Monitor",
+  "title": "Neurader \u2014 Ansible Execution Monitor",
   "description": "Per-run, per-host Ansible execution visibility powered by Neurader + Loki",
-  "tags": ["neurader", "ansible"],
+  "tags": [
+    "neurader",
+    "ansible"
+  ],
   "timezone": "browser",
   "schemaVersion": 38,
   "version": 2,
   "refresh": "30s",
-  "time": { "from": "now-7d", "to": "now" },
-
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
         "name": "playbook",
         "label": "Playbook",
         "type": "query",
-        "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
         "query": "label_values({job=\"neurader\"}, playbook)",
         "includeAll": false,
         "multi": false,
@@ -26,7 +34,10 @@
         "name": "run",
         "label": "Run",
         "type": "query",
-        "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
         "query": "label_values({job=\"neurader\", playbook=\"$playbook\"}, run_id)",
         "includeAll": false,
         "multi": false,
@@ -38,7 +49,10 @@
         "name": "host",
         "label": "Host",
         "type": "query",
-        "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
         "query": "label_values({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\"}, host)",
         "includeAll": true,
         "allValue": ".*",
@@ -49,196 +63,821 @@
       }
     ]
   },
-
   "panels": [
     {
       "id": 1,
       "type": "stat",
       "title": "Total Hosts",
-      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 5 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["count"] } },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" }, "unit": "short" } },
-      "targets": [{ "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\"}", "refId": "A", "queryType": "range" }]
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(count_over_time({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\"}[$__range]))",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
     {
       "id": 2,
       "type": "stat",
       "title": "Successful",
-      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 5 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["count"] } },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "green" }, "unit": "short" } },
-      "targets": [{ "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\", status=\"success\"}", "refId": "A", "queryType": "range" }]
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(count_over_time({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\", status=\"success\"}[$__range]))",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
     {
       "id": 3,
       "type": "stat",
       "title": "Failed",
-      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 5 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["count"] } },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "red" }, "unit": "short" } },
-      "targets": [{ "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\", status=\"failed\"}", "refId": "A", "queryType": "range" }]
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(count_over_time({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\", status=\"failed\"}[$__range]))",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
     {
       "id": 4,
       "type": "stat",
       "title": "Unreachable",
-      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 5 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["count"] } },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "orange" }, "unit": "short" } },
-      "targets": [{ "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\", status=\"unreachable\"}", "refId": "A", "queryType": "range" }]
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(count_over_time({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\", status=\"unreachable\"}[$__range]))",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
     {
       "id": 5,
       "type": "stat",
       "title": "Success Rate",
-      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 5 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 95 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
         }
       },
-      "targets": [{ "expr": "sum(count_over_time({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", status=\"success\"}[$__range])) / sum(count_over_time({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\"}[$__range])) * 100", "refId": "A", "queryType": "range" }]
+      "targets": [
+        {
+          "expr": "sum(count_over_time({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", status=\"success\"}[$__range])) / sum(count_over_time({job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\"}[$__range])) * 100",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
     {
       "id": 6,
       "type": "stat",
       "title": "Total Runs (Playbook)",
       "description": "Total number of runs recorded for selected playbook",
-      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 5 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["count"] } },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "purple" }, "unit": "short" } },
-      "targets": [{ "expr": "{job=\"neurader\", playbook=\"$playbook\"}", "refId": "A", "queryType": "range" }]
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(count_over_time({job=\"neurader\", playbook=\"$playbook\"}[$__range]))",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
-
     {
       "id": 7,
       "type": "table",
-      "title": "Host Results — Selected Run",
+      "title": "Host Results \u2014 Selected Run",
       "description": "Every host result for the selected run. Use Host filter to drill down.",
-      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 10 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "sortBy": [{ "displayName": "Status", "desc": false }], "footer": { "show": false }, "frameIndex": 0 },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "Status",
+            "desc": false
+          }
+        ],
+        "footer": {
+          "show": false
+        },
+        "frameIndex": 0
+      },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "left", "minWidth": 100 } },
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "minWidth": 100
+          }
+        },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Status" },
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
             "properties": [
-              { "id": "custom.displayMode", "value": "color-background" },
-              { "id": "custom.width", "value": 140 },
-              { "id": "mappings", "value": [
-                { "type": "value", "options": { "success":     { "color": "green",  "index": 0, "text": "✓  success"     } } },
-                { "type": "value", "options": { "failed":      { "color": "red",    "index": 1, "text": "✕  failed"      } } },
-                { "type": "value", "options": { "unreachable": { "color": "orange", "index": 2, "text": "⚠  unreachable" } } }
-              ]}
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "success": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "\u2713  success"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "failed": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "\u2715  failed"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "unreachable": {
+                        "color": "orange",
+                        "index": 2,
+                        "text": "\u26a0  unreachable"
+                      }
+                    }
+                  }
+                ]
+              }
             ]
           },
-          { "matcher": { "id": "byName", "options": "Host"       }, "properties": [{ "id": "custom.width", "value": 160 }] },
-          { "matcher": { "id": "byName", "options": "OK"         }, "properties": [{ "id": "custom.width", "value": 70  }] },
-          { "matcher": { "id": "byName", "options": "Changed"    }, "properties": [{ "id": "custom.width", "value": 90  }] },
-          { "matcher": { "id": "byName", "options": "Failed"     }, "properties": [{ "id": "custom.width", "value": 80  }] },
-          { "matcher": { "id": "byName", "options": "Unreachable"}, "properties": [{ "id": "custom.width", "value": 110 }] },
-          { "matcher": { "id": "byName", "options": "Time"       }, "properties": [{ "id": "custom.width", "value": 180 }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Host"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "OK"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Changed"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failed"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unreachable"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          }
         ]
       },
       "transformations": [
-        { "id": "extractFields", "options": { "source": "Line", "format": "json" } },
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "Line",
+            "format": "json",
+            "keepTime": true
+          }
+        },
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "id": true, "tsNs": true, "labels": true, "Line": true, "start_time": true, "end_time": true, "skipped": true, "run_id": true, "playbook": true },
-            "renameByName": { "Time": "Time", "host": "Host", "status": "Status", "ok": "OK", "changed": "Changed", "failed": "Failed", "unreachable": "Unreachable" },
-            "indexByName": { "Time": 0, "host": 1, "status": 2, "ok": 3, "changed": 4, "failed": 5, "unreachable": 6 }
+            "excludeByName": {
+              "id": true,
+              "tsNs": true,
+              "labels": true,
+              "Line": true,
+              "start_time": true,
+              "end_time": true,
+              "skipped": true,
+              "run_id": true,
+              "playbook": true,
+              "labelTypes": true
+            },
+            "renameByName": {
+              "Time": "Time",
+              "host": "Host",
+              "status": "Status",
+              "ok": "OK",
+              "changed": "Changed",
+              "failed": "Failed",
+              "unreachable": "Unreachable"
+            },
+            "indexByName": {
+              "Time": 0,
+              "host": 1,
+              "status": 2,
+              "ok": 3,
+              "changed": 4,
+              "failed": 5,
+              "unreachable": 6
+            }
           }
         }
       ],
-      "targets": [{ "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\"}", "refId": "A", "queryType": "range" }]
+      "targets": [
+        {
+          "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\"}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
-
     {
       "id": 8,
       "type": "table",
-      "title": "Failed & Unreachable — Error Details",
+      "title": "Failed & Unreachable \u2014 Error Details",
       "description": "Exact module, error message and return code for every failure in this run",
-      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 9 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "sortBy": [{ "displayName": "Host", "desc": false }], "footer": { "show": false } },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "Host",
+            "desc": false
+          }
+        ],
+        "footer": {
+          "show": false
+        }
+      },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "left" } },
+        "defaults": {
+          "custom": {
+            "align": "left"
+          }
+        },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Host"   }, "properties": [{ "id": "custom.width", "value": 160 }] },
-          { "matcher": { "id": "byName", "options": "Status" }, "properties": [
-            { "id": "custom.width", "value": 120 },
-            { "id": "custom.displayMode", "value": "color-background" },
-            { "id": "mappings", "value": [
-              { "type": "value", "options": { "failed":      { "color": "red",    "index": 0 } } },
-              { "type": "value", "options": { "unreachable": { "color": "orange", "index": 1 } } }
-            ]}
-          ]},
-          { "matcher": { "id": "byName", "options": "Module" }, "properties": [{ "id": "custom.width", "value": 130 }] },
-          { "matcher": { "id": "byName", "options": "RC"     }, "properties": [{ "id": "custom.width", "value": 60  }] },
-          { "matcher": { "id": "byName", "options": "Error"  }, "properties": [{ "id": "custom.wrap",  "value": true }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Host"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "failed": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "unreachable": {
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Module"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RC"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 60
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error"
+            },
+            "properties": [
+              {
+                "id": "custom.wrap",
+                "value": true
+              }
+            ]
+          }
         ]
       },
       "transformations": [
-        { "id": "extractFields", "options": { "source": "Line", "format": "json" } },
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "Line",
+            "format": "json",
+            "keepTime": true
+          }
+        },
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "id": true, "tsNs": true, "labels": true, "Line": true, "ok": true, "changed": true, "skipped": true, "unreachable": true, "start_time": true, "end_time": true, "playbook": true, "run_id": true },
-            "renameByName": { "Time": "Time", "host": "Host", "status": "Status", "failed": "Failed Tasks", "error_module": "Module", "error_msg": "Error", "error_rc": "RC", "error_stderr": "Stderr" },
-            "indexByName": { "Time": 0, "host": 1, "status": 2, "error_module": 3, "error_msg": 4, "error_rc": 5, "error_stderr": 6 }
+            "excludeByName": {
+              "id": true,
+              "tsNs": true,
+              "labels": true,
+              "Line": true,
+              "ok": true,
+              "changed": true,
+              "skipped": true,
+              "unreachable": true,
+              "start_time": true,
+              "end_time": true,
+              "playbook": true,
+              "run_id": true,
+              "labelTypes": true
+            },
+            "renameByName": {
+              "Time": "Time",
+              "host": "Host",
+              "status": "Status",
+              "failed": "Failed Tasks",
+              "error_module": "Module",
+              "error_msg": "Error",
+              "error_rc": "RC",
+              "error_stderr": "Stderr"
+            },
+            "indexByName": {
+              "Time": 0,
+              "host": 1,
+              "status": 2,
+              "error_module": 3,
+              "error_msg": 4,
+              "error_rc": 5,
+              "error_stderr": 6
+            }
           }
         }
       ],
-      "targets": [{ "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\", status=~\"failed|unreachable\"}", "refId": "A", "queryType": "range" }]
+      "targets": [
+        {
+          "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\", status=~\"failed|unreachable\"}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
-
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Run History — Pass / Fail Trend",
+      "title": "Run History \u2014 Pass / Fail Trend",
       "description": "Success and failure trend across all runs of the selected playbook",
-      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "fieldConfig": {
-        "defaults": { "unit": "short", "custom": { "lineWidth": 2 } },
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "failed"      }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red"    } }] },
-          { "matcher": { "id": "byName", "options": "success"     }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green"  } }] },
-          { "matcher": { "id": "byName", "options": "unreachable" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "success"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unreachable"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
         ]
       },
-      "targets": [{ "expr": "sum by (status) (count_over_time({job=\"neurader\", playbook=\"$playbook\"}[$__interval]))", "legendFormat": "{{status}}", "refId": "A", "queryType": "range" }]
+      "targets": [
+        {
+          "expr": "sum by (status) (count_over_time({job=\"neurader\", playbook=\"$playbook\"}[$__interval]))",
+          "legendFormat": "{{status}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     },
-
     {
       "id": 10,
       "type": "logs",
-      "title": "Raw Logs — Selected Run",
-      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "options": { "dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": true, "showTime": true, "showLabels": true, "wrapLogMessage": false, "sortOrder": "Descending" },
-      "targets": [{ "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\"}", "refId": "A", "queryType": "range" }]
+      "title": "Raw Logs \u2014 Selected Run",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": false,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "expr": "{job=\"neurader\", playbook=\"$playbook\", run_id=\"$run\", host=~\"$host\"}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
     }
   ],
-
-  "__inputs": [{ "name": "DS_LOKI", "label": "Loki", "type": "datasource", "pluginId": "loki", "pluginName": "Loki" }],
+  "__inputs": [
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
   "__requires": [
-    { "type": "datasource", "id": "loki",      "name": "Loki",        "version": "1.0.0" },
-    { "type": "panel",      "id": "stat",       "name": "Stat",        "version": "" },
-    { "type": "panel",      "id": "table",      "name": "Table",       "version": "" },
-    { "type": "panel",      "id": "timeseries", "name": "Time series", "version": "" },
-    { "type": "panel",      "id": "logs",       "name": "Logs",        "version": "" }
+    {
+      "type": "datasource",
+      "id": "loki",
+      "name": "Loki",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "logs",
+      "name": "Logs",
+      "version": ""
+    }
   ]
 }
