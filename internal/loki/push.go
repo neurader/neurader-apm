@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"neurader/internal/config"
@@ -88,7 +90,7 @@ func pushFile(cfg config.Config, filePath string) error {
 	for hostName, result := range run.Hosts {
 
 		// Build a rich log line with all host details as JSON
-		logLine := buildLogLine(run, hostName, result)
+		logLine := buildLogLine(run, hostName, result, filePath)
 
 		stream := lokiStream{
 			Stream: map[string]string{
@@ -96,6 +98,7 @@ func pushFile(cfg config.Config, filePath string) error {
 				"playbook": run.Playbook,
 				"host":     hostName,
 				"status":   result.Status,
+				"run_id":   runID(filePath),
 			},
 			Values: [][]string{
 				{strconv.FormatInt(ts, 10), logLine},
@@ -113,12 +116,13 @@ func pushFile(cfg config.Config, filePath string) error {
 
 // buildLogLine serialises the host result into a JSON log line.
 // This is what appears in Grafana's log explorer and table panels.
-func buildLogLine(run logs.PlaybookRun, host string, result logs.HostResult) string {
+func buildLogLine(run logs.PlaybookRun, host string, result logs.HostResult, filePath string) string {
 	entry := map[string]interface{}{
 		"playbook":   run.Playbook,
 		"start_time": run.StartTime,
 		"end_time":   run.EndTime,
 		"host":       host,
+		"run_id":     runID(filePath),
 		"status":     result.Status,
 		"ok":         result.Summary.OK,
 		"changed":    result.Summary.Changed,
@@ -140,6 +144,13 @@ func buildLogLine(run logs.PlaybookRun, host string, result logs.HostResult) str
 		return fmt.Sprintf(`{"host":%q,"status":%q}`, host, result.Status)
 	}
 	return string(line)
+}
+
+// runID derives a short unique run identifier from the log filename.
+// e.g. "sitecom.yml_2026-03-07_17-11-31.json" → "sitecom.yml_2026-03-07_17-11-31"
+func runID(filePath string) string {
+	base := filepath.Base(filePath)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 // parseTimeNS converts a time string to Unix nanoseconds for Loki.
