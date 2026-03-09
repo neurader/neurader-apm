@@ -9,6 +9,7 @@ import (
 
 	"neurader/internal/config"
 	"neurader/internal/grafana"
+	"neurader/internal/inventory"
 	"neurader/internal/loki"
 	"neurader/internal/logs"
 	"neurader/internal/setup"
@@ -105,9 +106,25 @@ func main() {
 		},
 	})
 
+	// ── neurader inventory ─────────────────────────────────────────────────
+	root.AddCommand(func() *cobra.Command {
+		var group string
+		cmd := &cobra.Command{
+			Use:   "inventory",
+			Short: "Show all hosts and groups from Ansible inventory",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				cfg, err := config.Load()
+				if err != nil {
+					return err
+				}
+				return inventory.Show(cfg, group)
+			},
+		}
+		cmd.Flags().StringVarP(&group, "group", "g", "", "Filter by group name")
+		return cmd
+	}())
+
 	// ── neurader loki-setup ──────────────────────────────────────────────
-	// Installs Loki on the Grafana node (if SSH configured), creates the
-	// Loki datasource in Grafana, and imports the Neurader dashboard.
 	root.AddCommand(&cobra.Command{
 		Use:   "loki-setup",
 		Short: "Install Loki, create datasource and import dashboard into Grafana",
@@ -181,5 +198,4 @@ func banner() string {
 ╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝
 
 Ansible Execution Monitor`
-
 }
