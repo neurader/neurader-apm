@@ -39,15 +39,9 @@ func List(logDir string) error {
 	}
 
 	greenF := color.New(color.FgGreen).SprintFunc()
-	redF := color.New(color.FgRed).SprintFunc()
-	boldF := color.New(color.Bold).SprintFunc()
+	redF   := color.New(color.FgRed).SprintFunc()
+	boldF  := color.New(color.Bold).SprintFunc()
 
-	// tabwriter cannot account for ANSI color escape sequences — they add
-	// invisible bytes that throw off column width calculations. Fix: use
-	// fmt.Printf with fixed-width format strings instead of tabwriter,
-	// and apply color AFTER padding so column widths are always consistent.
-	// Headers use a plain format string first, then bold is applied to the
-	// entire pre-formatted string so padding is never affected by ANSI codes.
 	header := fmt.Sprintf("  %-19s  %-20s  %-5s  %-7s  %-6s  %s",
 		"TIMESTAMP", "PLAYBOOK", "HOSTS", "SUCCESS", "FAILED", "FILE")
 	sep := fmt.Sprintf("  %-19s  %-20s  %-5s  %-7s  %-6s  %s",
@@ -59,15 +53,12 @@ func List(logDir string) error {
 	fmt.Println(sep)
 
 	for _, m := range metas {
-		// Format numbers at fixed width BEFORE colorizing
-		// so the terminal sees consistent character counts
 		successStr := greenF(fmt.Sprintf("%-7d", m.Success))
-		failedVal := fmt.Sprintf("%-6d", m.Failed)
-		failedStr := failedVal
+		failedVal  := fmt.Sprintf("%-6d", m.Failed)
+		failedStr  := failedVal
 		if m.Failed > 0 {
 			failedStr = redF(failedVal)
 		}
-
 		fmt.Printf("  %-19s  %-20s  %-5d  %s  %s  %s\n",
 			m.Timestamp.Format("2006-01-02 15:04:05"),
 			truncate(m.Playbook, 20),
@@ -82,20 +73,23 @@ func List(logDir string) error {
 }
 
 // Show prints the detailed per-host result of a single playbook run.
-func Show(logDir, filename string) error {
-	fullPath := filename
-	if !filepath.IsAbs(filename) {
-		fullPath = filepath.Join(logDir, filename)
+// arg can be:
+//   - exact filename:  sitecom.yml_2026-03-08_00-50-05.json
+//   - playbook name:   sitecom.yml  → finds latest run for that playbook
+func Show(logDir, arg string) error {
+	path, err := resolveLog(logDir, arg)
+	if err != nil {
+		return err
 	}
 
-	data, err := os.ReadFile(fullPath)
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("cannot open %s: %w", filename, err)
+		return fmt.Errorf("cannot open %s: %w", filepath.Base(path), err)
 	}
 
 	var run PlaybookRun
 	if err := json.Unmarshal(data, &run); err != nil {
-		return fmt.Errorf("parsing %s: %w", filename, err)
+		return fmt.Errorf("parsing log: %w", err)
 	}
 
 	printRun(run)
@@ -126,6 +120,27 @@ func AllPaths(logDir string) ([]string, error) {
 
 // ── Internal ──────────────────────────────────────────────────────────────────
 
+// resolveLog finds the log file from an exact filename or playbook name.
+func resolveLog(logDir, arg string) (string, error) {
+	// Exact filename
+	if strings.HasSuffix(arg, ".json") {
+		path := filepath.Join(logDir, arg)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+		return "", fmt.Errorf("log file not found: %s", arg)
+	}
+
+	// Playbook name — find latest run
+	pattern := filepath.Join(logDir, arg+"_*.json")
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		return "", fmt.Errorf("no runs found for playbook %q — use `neurader list` to see available runs", arg)
+	}
+	sort.Strings(matches)
+	return matches[len(matches)-1], nil
+}
+
 func readMetas(logDir string) ([]LogMeta, error) {
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
@@ -140,6 +155,10 @@ func readMetas(logDir string) ([]LogMeta, error) {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue
 		}
+		// Skip inventory snapshot
+		if e.Name() == "inventory.json" {
+			continue
+		}
 		info, err := e.Info()
 		if err != nil {
 			continue
@@ -149,13 +168,12 @@ func readMetas(logDir string) ([]LogMeta, error) {
 			Timestamp: info.ModTime(),
 			SizeBytes: info.Size(),
 		}
-		// Parse the file to get playbook name and host counts
 		data, err := os.ReadFile(filepath.Join(logDir, e.Name()))
 		if err == nil {
 			var run PlaybookRun
 			if json.Unmarshal(data, &run) == nil {
 				m.Playbook = run.Playbook
-				m.Total = run.TotalHosts
+				m.Total    = run.TotalHosts
 				for _, h := range run.Hosts {
 					if h.Status == "success" {
 						m.Success++
@@ -168,7 +186,6 @@ func readMetas(logDir string) ([]LogMeta, error) {
 		metas = append(metas, m)
 	}
 
-	// Sort newest first
 	sort.Slice(metas, func(i, j int) bool {
 		return metas[i].Timestamp.After(metas[j].Timestamp)
 	})
@@ -177,9 +194,10 @@ func readMetas(logDir string) ([]LogMeta, error) {
 
 func printRun(run PlaybookRun) {
 	greenC := color.New(color.FgGreen, color.Bold)
-	redC := color.New(color.FgRed, color.Bold)
-	boldC := color.New(color.Bold)
-	cyanC := color.New(color.FgCyan)
+	redC   := color.New(color.FgRed, color.Bold)
+	boldC  := color.New(color.Bold)
+	cyanC  := color.New(color.FgCyan)
+	div    := strings.Repeat("─", 65)
 
 	fmt.Println()
 	boldC.Printf("  Playbook : %s\n", run.Playbook)
@@ -187,8 +205,9 @@ func printRun(run PlaybookRun) {
 	fmt.Printf("  Ended    : %s\n", run.EndTime)
 	fmt.Printf("  Hosts    : %d total\n", run.TotalHosts)
 	fmt.Println()
+	fmt.Printf("  %s\n", div)
 
-	// Sort: failed/unreachable first, then alphabetical
+	// Sort — failed/unreachable first, then alphabetical
 	type entry struct {
 		name string
 		h    HostResult
@@ -205,38 +224,73 @@ func printRun(run PlaybookRun) {
 		return hosts[i].name < hosts[j].name
 	})
 
+	failedCount  := 0
+	successCount := 0
+
 	for _, e := range hosts {
 		h := e.h
 		switch h.Status {
+		case "failed", "unreachable":
+			failedCount++
+			icon := "✗"
+			label := "FAILED"
+			if h.Status == "unreachable" {
+				label = "UNREACHABLE"
+			}
+			fmt.Println()
+			redC.Printf("  %s  %-30s  [%s]\n", icon, e.name, label)
+			fmt.Printf("     OK: %d  Changed: %d  Failed: %d  Skipped: %d\n",
+				h.Summary.OK, h.Summary.Changed, h.Summary.Failures, h.Summary.Skipped)
+
+			if len(h.FailedTasks) > 0 {
+				fmt.Println()
+				for i, t := range h.FailedTasks {
+					cyanC.Printf("     Failed Task %d of %d\n", i+1, len(h.FailedTasks))
+					fmt.Printf("     %s\n", strings.Repeat("·", 55))
+					fmt.Printf("     Task    : %s\n", t.TaskName)
+					if t.TaskPath != "" {
+						fmt.Printf("     Path    : %s\n", t.TaskPath)
+					}
+					fmt.Printf("     Module  : %s\n", t.Module)
+					if len(t.TaskArgs) > 0 {
+						fmt.Printf("     Args    :\n")
+						for k, v := range t.TaskArgs {
+							fmt.Printf("               %s = %v\n", k, v)
+						}
+					}
+					fmt.Printf("     RC      : %d\n", t.RC)
+					if t.Msg != "" {
+						fmt.Printf("     Message :\n")
+						printIndented(t.Msg, "               ")
+					}
+					if t.Stdout != "" {
+						fmt.Printf("     Stdout  :\n")
+						printIndented(t.Stdout, "               ")
+					}
+					if t.Stderr != "" {
+						fmt.Printf("     Stderr  :\n")
+						printIndented(t.Stderr, "               ")
+					}
+					if t.Exception != "" {
+						fmt.Printf("     Exception:\n")
+						printIndented(t.Exception, "               ")
+					}
+					fmt.Println()
+				}
+			}
+			fmt.Printf("  %s\n", div)
+
 		case "success":
-			greenC.Printf("  ✓ %-35s SUCCESS", e.name)
-			fmt.Printf("  (ok=%d changed=%d skipped=%d)\n",
-				h.Summary.OK, h.Summary.Changed, h.Summary.Skipped)
-
-		case "failed":
-			redC.Printf("  ✗ %-35s FAILED\n", e.name)
-			if h.ErrorOutput != nil {
-				cyanC.Printf("    Module : %s\n", h.ErrorOutput.Module)
-				if h.ErrorOutput.Msg != "" {
-					fmt.Printf("    Msg    : %s\n", h.ErrorOutput.Msg)
-				}
-				if h.ErrorOutput.Stderr != "" {
-					fmt.Printf("    Stderr : %s\n", indentLines(h.ErrorOutput.Stderr, "             "))
-				}
-				if h.ErrorOutput.Stdout != "" {
-					fmt.Printf("    Stdout : %s\n", indentLines(h.ErrorOutput.Stdout, "             "))
-				}
-				fmt.Printf("    RC     : %d\n", h.ErrorOutput.RC)
-			}
-
-		case "unreachable":
-			redC.Printf("  ✗ %-35s UNREACHABLE\n", e.name)
-			if h.ErrorOutput != nil && h.ErrorOutput.Msg != "" {
-				fmt.Printf("    Msg    : %s\n", h.ErrorOutput.Msg)
-			}
+			successCount++
 		}
 	}
-	fmt.Println()
+
+	// Success — count only, no detail
+	if successCount > 0 {
+		fmt.Println()
+		greenC.Printf("  ✓  %d host(s) succeeded\n", successCount)
+		fmt.Println()
+	}
 }
 
 func statusRank(s string) int {
@@ -251,6 +305,13 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+func printIndented(text, indent string) {
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	for _, line := range lines {
+		fmt.Printf("%s%s\n", indent, line)
+	}
 }
 
 func indentLines(s, prefix string) string {

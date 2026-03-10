@@ -13,20 +13,16 @@ import (
 	"neurader/internal/logs"
 )
 
-// lokiPushPayload is the JSON body for POST /loki/api/v1/push
-// https://grafana.com/docs/loki/latest/reference/loki-http-api/#push-log-entries-to-loki
 type lokiPushPayload struct {
 	Streams []lokiStream `json:"streams"`
 }
 
-// lokiStream is one labelled log stream containing one or more log lines.
 type lokiStream struct {
-	Stream map[string]string `json:"stream"` // labels — indexed by Loki
-	Values [][]string        `json:"values"` // [[timestamp_ns, log_line], ...]
+	Stream map[string]string `json:"stream"`
+	Values [][]string        `json:"values"`
 }
 
 // PushLatest reads the most recently written log and pushes it to Loki.
-// Called automatically by `neurader post-run` after each playbook finishes.
 func PushLatest(cfg config.Config) error {
 	path, err := logs.LatestPath(cfg.LogDir)
 	if err != nil || path == "" {
@@ -36,7 +32,6 @@ func PushLatest(cfg config.Config) error {
 }
 
 // PushAll pushes every log file in logDir to Loki.
-// Called by `neurader push`.
 func PushAll(cfg config.Config) error {
 	paths, err := logs.AllPaths(cfg.LogDir)
 	if err != nil {
@@ -56,17 +51,6 @@ func PushAll(cfg config.Config) error {
 	return nil
 }
 
-// pushFile reads one neurader JSON log and sends one Loki stream
-// entry per host. Each entry carries the host result as a JSON line
-// with labels for fast filtering.
-//
-// Label design:
-//   job      = "neurader"            — always set, used to find all neurader logs
-//   playbook = "site.yml"            — playbook name
-//   host     = "node3"               — managed host
-//   status   = "success"|"failed"|"unreachable"
-//
-// Log line: full JSON of the host result for detailed inspection in Grafana.
 func pushFile(cfg config.Config, filePath string) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -78,21 +62,13 @@ func pushFile(cfg config.Config, filePath string) error {
 		return fmt.Errorf("parsing %s: %w", filePath, err)
 	}
 
-	// Use the run's start time as the log timestamp.
-	// Fall back to now if parsing fails.
 	ts := parseTimeNS(run.StartTime)
+	c  := newClient(cfg)
 
-	c := newClient(cfg)
-
-	// Build one stream per host so each host is independently queryable.
 	var streams []lokiStream
-
 	for hostName, result := range run.Hosts {
-
-		// Build a rich log line with all host details as JSON
 		logLine := buildLogLine(run, hostName, result, filePath)
-
-		stream := lokiStream{
+		stream  := lokiStream{
 			Stream: map[string]string{
 				"job":      "neurader",
 				"playbook": run.Playbook,
@@ -110,33 +86,36 @@ func pushFile(cfg config.Config, filePath string) error {
 	if len(streams) == 0 {
 		return nil
 	}
-
 	return c.push(lokiPushPayload{Streams: streams})
 }
 
-// buildLogLine serialises the host result into a JSON log line.
-// This is what appears in Grafana's log explorer and table panels.
+// buildLogLine serialises the host result into a JSON log line for Grafana.
+// For failed hosts includes first failed task details for dashboard panels.
 func buildLogLine(run logs.PlaybookRun, host string, result logs.HostResult, filePath string) string {
 	entry := map[string]interface{}{
-		"playbook":   run.Playbook,
-		"start_time": run.StartTime,
-		"end_time":   run.EndTime,
-		"host":       host,
-		"run_id":     runID(filePath),
-		"status":     result.Status,
-		"ok":         result.Summary.OK,
-		"changed":    result.Summary.Changed,
-		"failed":     result.Summary.Failures,
+		"playbook":    run.Playbook,
+		"start_time":  run.StartTime,
+		"end_time":    run.EndTime,
+		"host":        host,
+		"run_id":      runID(filePath),
+		"status":      result.Status,
+		"ok":          result.Summary.OK,
+		"changed":     result.Summary.Changed,
+		"failed":      result.Summary.Failures,
 		"unreachable": result.Summary.Unreachable,
-		"skipped":    result.Summary.Skipped,
+		"skipped":     result.Summary.Skipped,
 	}
 
-	if result.ErrorOutput != nil {
-		entry["error_msg"]    = result.ErrorOutput.Msg
-		entry["error_stderr"] = result.ErrorOutput.Stderr
-		entry["error_stdout"] = result.ErrorOutput.Stdout
-		entry["error_rc"]     = result.ErrorOutput.RC
-		entry["error_module"] = result.ErrorOutput.Module
+	// For Grafana dashboard panels — include first failed task details
+	// Full task list is in the local log file, accessible via neurader show
+	if len(result.FailedTasks) > 0 {
+		first := result.FailedTasks[0]
+		entry["error_module"]      = first.Module
+		entry["error_msg"]         = first.Msg
+		entry["error_rc"]          = first.RC
+		entry["error_stderr"]      = first.Stderr
+		entry["failed_task_count"] = len(result.FailedTasks)
+		entry["first_failed_task"] = first.TaskName
 	}
 
 	line, err := json.Marshal(entry)
@@ -146,14 +125,11 @@ func buildLogLine(run logs.PlaybookRun, host string, result logs.HostResult, fil
 	return string(line)
 }
 
-// runID derives a short unique run identifier from the log filename.
-// e.g. "sitecom.yml_2026-03-07_17-11-31.json" → "sitecom.yml_2026-03-07_17-11-31"
 func runID(filePath string) string {
 	base := filepath.Base(filePath)
 	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
-// parseTimeNS converts a time string to Unix nanoseconds for Loki.
 func parseTimeNS(s string) int64 {
 	formats := []string{
 		time.RFC3339,
