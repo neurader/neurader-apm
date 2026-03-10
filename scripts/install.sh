@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ────────────────────────────────────────────────────────────────────────────
 # neurader installer
-# Usage: curl -L https://neurader.operman.in/neurader/install.sh | sudo bash |
+# Usage: curl -L https://neurader.cloud/neurader/install.sh | sudo bash |
 # ────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
-BASE_URL="https://neurader.operman.in/neurader/releases/latest"
+BASE_URL="https://neurader.cloud/neurader/releases/latest"
 INSTALL_DIR="/usr/bin"
 BINARY_NAME="neurader"
 TMP_FILE="/tmp/neurader-download-$$"
@@ -41,7 +41,7 @@ echo -e "  ${DIM}─────────────────────
 # ── Root check ───────────────────────────────────────────────────────────────
 step "[1] Checking permissions"
 if [[ $EUID -ne 0 ]]; then
-  err "This installer must be run as root.\n     Try: curl -L https://neurader.operman.in/neurader/install.sh | sudo bash"
+  err "This installer must be run as root.\n     Try: curl -L https://neurader.cloud/neurader/install.sh | sudo bash"
 fi
 ok "Running as root"
 
@@ -170,4 +170,5 @@ echo -e "  ${DIM}Then run any ansible-playbook command as normal.${RESET}"
 echo -e "  ${DIM}View runs : neurader list${RESET}"
 echo -e "  ${DIM}Inspect   : neurader show <filename>${RESET}"
 echo ""
+
 
