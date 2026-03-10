@@ -195,18 +195,18 @@ jobs:
 
             | Architecture | Runs on | Link |
             |---|---|---|
-            | amd64 | Intel/AMD servers, most cloud VMs | [neurader-linux-amd64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64) |
-            | arm64 | AWS Graviton, GCP Tau, Raspberry Pi 4/5 | [neurader-linux-arm64](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm64) |
-            | arm | Raspberry Pi 2/3, older embedded devices | [neurader-linux-arm](https://neurader.operman.in/neurader/releases/latest/neurader-linux-arm) |
+            | amd64 | Intel/AMD servers, most cloud VMs | [neurader-linux-amd64](https://neurader.cloud/neurader/releases/latest/neurader-linux-amd64) |
+            | arm64 | AWS Graviton, GCP Tau, Raspberry Pi 4/5 | [neurader-linux-arm64](https://neurader.cloud/neurader/releases/latest/neurader-linux-arm64) |
+            | arm | Raspberry Pi 2/3, older embedded devices | [neurader-linux-arm](https://neurader.cloud/neurader/releases/latest/neurader-linux-arm) |
 
             ### Install
             ```bash
-            curl -L https://neurader.operman.in/neurader/releases/install.sh | sudo bash
+            curl -L https://neurader.cloud/neurader/releases/install.sh | sudo bash
             ```
 
             ### Verify checksum
             ```bash
-            curl -L https://neurader.operman.in/neurader/releases/latest/checksums.sha256 -o checksums.sha256
+            curl -L https://neurader.cloud/neurader/releases/latest/checksums.sha256 -o checksums.sha256
             sha256sum -c checksums.sha256
             ```
           draft: false
