@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	baseURL    = "https://neurader.operman.in/neurader/releases"
-	versionURL = "https://neurader.operman.in/neurader/releases/version.json"
+	baseURL    = "https://neurader.cloud/neurader/releases"
+	versionURL = "https://neurader.cloud/neurader/releases/version.json"
 	installDir = "/usr/bin"
 	binaryName = "neurader"
 )
@@ -71,7 +71,7 @@ func Run(currentVersion string) error {
 	}
 
 	// ── Step 5: Build download URL ────────────────────────────────────────
-	// e.g. https://neurader.operman.in/neurader/releases/latest/neurader-linux-amd64
+	// e.g. https://neurader.cloud/neurader/releases/latest/neurader-linux-amd64
 	binaryFile := fmt.Sprintf("neurader-linux-%s", arch)
 	downloadURL := fmt.Sprintf("%s/latest/%s", baseURL, binaryFile)
 	fmt.Printf("[neurader] downloading   : %s\n", downloadURL)
