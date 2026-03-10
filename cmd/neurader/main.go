@@ -9,14 +9,15 @@ import (
 
 	"neurader/internal/config"
 	"neurader/internal/grafana"
+	"neurader/internal/hostcmd"
 	"neurader/internal/inventory"
 	"neurader/internal/loki"
 	"neurader/internal/logs"
+	"neurader/internal/ping"
 	"neurader/internal/setup"
 	"neurader/internal/upgrade"
 )
 
-// version is injected at build time via -ldflags "-X main.version=v1.0.0"
 var version = "dev"
 
 func main() {
@@ -35,7 +36,7 @@ func main() {
 		},
 	})
 
-	// ── neurader post-run (hidden — called by Python callback after each run) ──
+	// ── neurader post-run (hidden) ─────────────────────────────────────────
 	root.AddCommand(&cobra.Command{
 		Use:    "post-run",
 		Hidden: true,
@@ -78,6 +79,55 @@ func main() {
 			return logs.Show(cfg.LogDir, args[0])
 		},
 	})
+
+	// ── neurader last ──────────────────────────────────────────────────────
+	root.AddCommand(func() *cobra.Command {
+		var onlyFailed bool
+		cmd := &cobra.Command{
+			Use:   "last",
+			Short: "Show the most recent playbook run",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				cfg, err := config.Load()
+				if err != nil {
+					return err
+				}
+				return hostcmd.Last(cfg, onlyFailed)
+			},
+		}
+		cmd.Flags().BoolVarP(&onlyFailed, "failed", "f", false, "Show only failed/unreachable hosts")
+		return cmd
+	}())
+
+	// ── neurader hosts ─────────────────────────────────────────────────────
+	root.AddCommand(&cobra.Command{
+		Use:   "hosts",
+		Short: "Show per-host success/failure stats across all runs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			return hostcmd.Hosts(cfg)
+		},
+	})
+
+	// ── neurader ping ──────────────────────────────────────────────────────
+	root.AddCommand(func() *cobra.Command {
+		var group string
+		cmd := &cobra.Command{
+			Use:   "ping",
+			Short: "Check if all inventory hosts are reachable right now",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				cfg, err := config.Load()
+				if err != nil {
+					return err
+				}
+				return ping.Run(cfg, group)
+			},
+		}
+		cmd.Flags().StringVarP(&group, "group", "g", "", "Ping hosts in a specific group only")
+		return cmd
+	}())
 
 	// ── neurader clean ─────────────────────────────────────────────────────
 	root.AddCommand(&cobra.Command{
@@ -124,7 +174,7 @@ func main() {
 		return cmd
 	}())
 
-	// ── neurader loki-setup ──────────────────────────────────────────────
+	// ── neurader loki-setup ────────────────────────────────────────────────
 	root.AddCommand(&cobra.Command{
 		Use:   "loki-setup",
 		Short: "Install Loki, create datasource and import dashboard into Grafana",
