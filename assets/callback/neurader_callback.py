@@ -17,15 +17,13 @@ DOCUMENTATION = '''
     description:
       - Writes a structured JSON log file after each playbook run.
       - Captures per-host status (success / failed / unreachable).
-      - Failed hosts include full error output: msg, stdout, stderr, rc, module.
+      - Captures ALL failed tasks per host with full details.
+      - Failed tasks include: task name, module, msg, stdout, stderr, rc, exception.
       - Automatically pushes logs to Loki after each run (if configured).
     requirements:
       - neurader binary installed at /usr/bin/neurader
 '''
 
-# Must be False — neurader is enabled via callbacks_enabled in ansible.cfg.
-# Setting True causes Ansible to print "unable to load" warning for
-# notification-type callbacks even when they load successfully.
 CALLBACK_NEEDS_ENABLED = False
 
 from ansible.plugins.callback import CallbackBase
@@ -39,7 +37,6 @@ import subprocess
 
 
 def _load_config():
-    """Read /etc/neurader/neurader.conf, return defaults if missing."""
     defaults = {
         'log_dir': '/var/log/neurader',
         'retention_days': 3,
@@ -54,13 +51,6 @@ def _load_config():
 
 
 def _find_neurader_bin():
-    """Locate the neurader binary.
-
-    Search order:
-      1. /usr/bin/neurader          — standard install path (v0.2.0+)
-      2. /usr/local/bin/neurader    — legacy install path (v0.1.x)
-      3. shutil.which('neurader')   — any other location in PATH
-    """
     candidates = [
         '/usr/bin/neurader',
         '/usr/local/bin/neurader',
@@ -68,7 +58,6 @@ def _find_neurader_bin():
     for path in candidates:
         if os.path.isfile(path):
             return path
-    # Fall back to PATH lookup
     found = shutil.which('neurader')
     if found:
         return found
@@ -82,17 +71,17 @@ SAFE_FILENAME = re.compile(r'[^\w\-.]')
 
 
 class CallbackModule(CallbackBase):
-    CALLBACK_VERSION      = 2.0
-    CALLBACK_TYPE         = 'notification'
-    CALLBACK_NAME         = 'neurader'
-    CALLBACK_NEEDS_ENABLED = False  # enabled via callbacks_enabled in ansible.cfg
+    CALLBACK_VERSION       = 2.0
+    CALLBACK_TYPE          = 'notification'
+    CALLBACK_NAME          = 'neurader'
+    CALLBACK_NEEDS_ENABLED = False
 
     def __init__(self):
         super(CallbackModule, self).__init__()
-        self._playbook_name  = None
-        self._start_time     = None
-        # host name → { status, error_output }
-        self._host_results   = {}
+        self._playbook_name = None
+        self._start_time    = None
+        # host → { status, failed_tasks: [] }
+        self._host_results  = {}
 
     # ── Playbook lifecycle ────────────────────────────────────────────────
 
@@ -105,39 +94,41 @@ class CallbackModule(CallbackBase):
 
     def v2_runner_on_ok(self, result):
         host = result._host.get_name()
-        # Only record success if the host has not already failed
         if host not in self._host_results:
             self._host_results[host] = {
                 'status':       'success',
-                'error_output': None,
+                'failed_tasks': [],
             }
 
     def v2_runner_on_failed(self, result, ignore_errors=False):
         host = result._host.get_name()
-        r    = result._result
-        self._host_results[host] = {
-            'status': 'failed',
-            'error_output': {
-                'msg':    r.get('msg', ''),
-                'stdout': r.get('stdout', ''),
-                'stderr': r.get('stderr', ''),
-                'rc':     r.get('rc', -1),
-                'module': result._task.action,
-            },
-        }
+        task_detail = self._extract_task_detail(result)
+
+        if host not in self._host_results:
+            self._host_results[host] = {
+                'status':       'failed',
+                'failed_tasks': [],
+            }
+        else:
+            self._host_results[host]['status'] = 'failed'
+
+        self._host_results[host]['failed_tasks'].append(task_detail)
 
     def v2_runner_on_unreachable(self, result):
         host = result._host.get_name()
         r    = result._result
         self._host_results[host] = {
             'status': 'unreachable',
-            'error_output': {
-                'msg':    r.get('msg', 'Host unreachable'),
-                'stdout': '',
-                'stderr': '',
-                'rc':     -1,
-                'module': 'connection',
-            },
+            'failed_tasks': [{
+                'task_name': result._task.get_name(),
+                'task_path': self._task_path(result),
+                'module':    'connection',
+                'msg':       r.get('msg', 'Host unreachable'),
+                'stdout':    '',
+                'stderr':    '',
+                'rc':        -1,
+                'exception': '',
+            }],
         }
 
     def v2_runner_on_skipped(self, result):
@@ -145,10 +136,10 @@ class CallbackModule(CallbackBase):
         if host not in self._host_results:
             self._host_results[host] = {
                 'status':       'success',
-                'error_output': None,
+                'failed_tasks': [],
             }
 
-    # ── Final stats (called once at the end of every playbook run) ────────
+    # ── Final stats ───────────────────────────────────────────────────────
 
     def v2_playbook_on_stats(self, stats):
         end_time = datetime.datetime.utcnow().isoformat()
@@ -159,11 +150,11 @@ class CallbackModule(CallbackBase):
             summary = stats.summarize(host)
             entry   = self._host_results.get(host, {
                 'status':       'success',
-                'error_output': None,
+                'failed_tasks': [],
             })
             final_hosts[host] = {
                 'status':       entry['status'],
-                'error_output': entry['error_output'],
+                'failed_tasks': entry.get('failed_tasks', []),
                 'summary': {
                     'ok':          summary.get('ok', 0),
                     'failures':    summary.get('failures', 0),
@@ -173,9 +164,6 @@ class CallbackModule(CallbackBase):
                 },
             }
 
-        # ── Build the JSON payload ────────────────────────────────────────
-        # Edit this section to customise the log format.
-        # Run `sudo neurader reset-callback` to restore the default.
         payload = {
             'playbook':    self._playbook_name,
             'start_time':  self._start_time,
@@ -189,10 +177,44 @@ class CallbackModule(CallbackBase):
             self._display.display(
                 '[neurader] Run logged → {}'.format(log_path))
 
-        # Fire-and-forget: neurader post-run writes to Loki automatically
         self._trigger_post_run()
 
-    # ── Internal helpers ──────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────
+
+    def _extract_task_detail(self, result):
+        """Extract full task details from a failed result."""
+        r = result._result
+        return {
+            'task_name': result._task.get_name(),
+            'task_path': self._task_path(result),
+            'module':    result._task.action,
+            'msg':       r.get('msg', ''),
+            'stdout':    r.get('stdout', '') or r.get('module_stdout', ''),
+            'stderr':    r.get('stderr', '') or r.get('module_stderr', ''),
+            'rc':        r.get('rc', -1),
+            'exception': r.get('exception', ''),
+            'task_args': self._extract_task_args(result),
+        }
+
+    def _task_path(self, result):
+        """Get the file path and line number of the task."""
+        try:
+            path = result._task.get_path()
+            return path if path else ''
+        except Exception:
+            return ''
+
+    def _extract_task_args(self, result):
+        """Extract resolved task arguments (variables already substituted by Ansible)."""
+        try:
+            args = result._task.args.copy()
+            # Scrub sensitive keys
+            for key in list(args.keys()):
+                if any(s in key.lower() for s in ('password', 'secret', 'token', 'key', 'pass')):
+                    args[key] = '***'
+            return args
+        except Exception:
+            return {}
 
     def _write_log(self, payload):
         try:
@@ -210,11 +232,7 @@ class CallbackModule(CallbackBase):
             return None
 
     def _trigger_post_run(self):
-        """Invoke `neurader post-run` in the background (non-blocking).
-
-        post-run runs asynchronously so it never blocks the playbook output.
-        It handles: log retention cleanup + Loki push (if loki_endpoint is set).
-        """
+        """Invoke `neurader post-run` in the background (non-blocking)."""
         if not NEURADER_BIN:
             self._display.warning(
                 '[neurader] binary not found — skipping post-run (Loki push)')
