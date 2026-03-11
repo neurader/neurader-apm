@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"neurader/internal/alert"
+	"neurader/internal/alertui"
 	"neurader/internal/config"
 	"neurader/internal/grafana"
 	"neurader/internal/hostcmd"
@@ -220,6 +221,27 @@ func main() {
 		},
 	})
 
+
+	// ── neurader alert-setup ──────────────────────────────────────────────
+	root.AddCommand(&cobra.Command{
+		Use:   "alert-setup",
+		Short: "Configure alert channels interactively (Slack, PagerDuty, Jira, Email...)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			_, saved, err := alertui.Run(cfg)
+			if err != nil {
+				return err
+			}
+			if saved {
+				fmt.Println("\n  u2713  Alert configuration saved to /etc/neurader/neurader.conf")
+				fmt.Println("  Run: neurader alert-test  to verify all channels\n")
+			}
+			return nil
+		},
+	})
 	// ── neurader alert-test ────────────────────────────────────────────────
 	root.AddCommand(func() *cobra.Command {
 		var channel string
