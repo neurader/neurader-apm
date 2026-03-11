@@ -182,13 +182,39 @@ class CallbackModule(CallbackBase):
     # ── Helpers ───────────────────────────────────────────────────────────
 
     def _extract_task_detail(self, result):
-        """Extract full task details from a failed result."""
+        """Extract full task details from a failed result.
+
+        Handles module-specific error formats:
+        - yum/dnf: per-package errors in r['failures'] list
+        - apt: errors in r['msg']
+        - general modules: r['msg'], r['stderr']
+        """
         r = result._result
+
+        msg      = r.get('msg', '')
+        failures = r.get('failures', [])
+        results  = r.get('results', [])
+
+        # Collect specific package/item errors
+        details = []
+        for f in failures:
+            if f and f not in details:
+                details.append(f)
+        for item in results:
+            if isinstance(item, str) and 'No package' in item and item not in details:
+                details.append(item)
+
+        # Append specific details to msg for full clarity
+        if details:
+            specific = '\n'.join(details)
+            if specific not in msg:
+                msg = (msg + '\n' + specific) if msg else specific
+
         return {
             'task_name': result._task.get_name(),
             'task_path': self._task_path(result),
             'module':    result._task.action,
-            'msg':       r.get('msg', ''),
+            'msg':       msg,
             'stdout':    r.get('stdout', '') or r.get('module_stdout', ''),
             'stderr':    r.get('stderr', '') or r.get('module_stderr', ''),
             'rc':        r.get('rc', -1),
