@@ -35,18 +35,57 @@ type Config struct {
 	LokiSSHUser string
 	LokiSSHKey  string
 	LokiSSHPort string
+
+	// Alert settings
+	AlertOnFailure     bool
+	AlertOnUnreachable bool
+
+	// Slack
+	SlackWebhook string
+
+	// PagerDuty
+	PagerDutyRoutingKey string
+
+	// Microsoft Teams
+	TeamsWebhook string
+
+	// Jira
+	JiraURL     string
+	JiraUser    string
+	JiraToken   string
+	JiraProject string
+
+	// Email
+	EmailSMTPHost string
+	EmailSMTPPort string
+	EmailFrom     string
+	EmailTo       string
+	EmailPassword string
+
+	// Telegram
+	TelegramBotToken string
+	TelegramChatID   string
+
+	// Generic webhook
+	WebhookURL    string
+	WebhookMethod string
+
+	// Prometheus Alertmanager
+	AlertmanagerURL string
 }
 
 // Defaults returns a Config with sensible defaults.
 func Defaults() Config {
 	return Config{
-		RetentionDays: 3,
-		LogDir:        LogDir,
+		RetentionDays:      3,
+		LogDir:             LogDir,
+		AlertOnFailure:     true,
+		AlertOnUnreachable: true,
+		WebhookMethod:      "POST",
 	}
 }
 
 // Load reads and parses /etc/neurader/neurader.conf.
-// Supports INI-style (key = value, # comments) and legacy JSON format.
 func Load() (Config, error) {
 	cfg := Defaults()
 
@@ -60,7 +99,6 @@ func Load() (Config, error) {
 
 	trimmed := strings.TrimSpace(string(data))
 	if strings.HasPrefix(trimmed, "{") {
-		// legacy JSON format — backward compatible with v0.2.x installs
 		if err := loadJSON(trimmed, &cfg); err != nil {
 			return cfg, fmt.Errorf("parsing config %s: %w", ConfigFile, err)
 		}
@@ -118,6 +156,45 @@ func loadINI(content string, cfg *Config) error {
 		case "loki_ssh_user":    cfg.LokiSSHUser = val
 		case "loki_ssh_key":     cfg.LokiSSHKey = val
 		case "loki_ssh_port":    cfg.LokiSSHPort = val
+
+		// Alert settings
+		case "alert_on_failure":
+			cfg.AlertOnFailure = val == "true" || val == "1" || val == "yes"
+		case "alert_on_unreachable":
+			cfg.AlertOnUnreachable = val == "true" || val == "1" || val == "yes"
+
+		// Slack
+		case "slack_webhook": cfg.SlackWebhook = val
+
+		// PagerDuty
+		case "pagerduty_routing_key": cfg.PagerDutyRoutingKey = val
+
+		// Teams
+		case "teams_webhook": cfg.TeamsWebhook = val
+
+		// Jira
+		case "jira_url":     cfg.JiraURL = val
+		case "jira_user":    cfg.JiraUser = val
+		case "jira_token":   cfg.JiraToken = val
+		case "jira_project": cfg.JiraProject = val
+
+		// Email
+		case "email_smtp_host": cfg.EmailSMTPHost = val
+		case "email_smtp_port": cfg.EmailSMTPPort = val
+		case "email_from":      cfg.EmailFrom = val
+		case "email_to":        cfg.EmailTo = val
+		case "email_password":  cfg.EmailPassword = val
+
+		// Telegram
+		case "telegram_bot_token": cfg.TelegramBotToken = val
+		case "telegram_chat_id":   cfg.TelegramChatID = val
+
+		// Generic webhook
+		case "webhook_url":    cfg.WebhookURL = val
+		case "webhook_method": cfg.WebhookMethod = val
+
+		// Alertmanager
+		case "alertmanager_url": cfg.AlertmanagerURL = val
 		}
 	}
 	return scanner.Err()
@@ -171,8 +248,7 @@ func loadJSON(content string, cfg *Config) error {
 	return nil
 }
 
-// Save writes cfg to /etc/neurader/neurader.conf in INI format with
-// sections and comments so users can easily understand and edit it.
+// Save writes cfg to /etc/neurader/neurader.conf in INI format.
 func Save(cfg Config) error {
 	if err := os.MkdirAll(ConfigDir, 0755); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
@@ -182,59 +258,100 @@ func Save(cfg Config) error {
 
 	b.WriteString("# ── neurader configuration ────────────────────────────────────────────────\n")
 	b.WriteString("# /etc/neurader/neurader.conf\n")
-	b.WriteString("# Edit directly or run: sudo neurader grafana-config\n")
-	b.WriteString("# Lines starting with # are comments — uncomment a line to activate it.\n")
-	b.WriteString("\n")
+	b.WriteString("# Edit directly or run: neurader alert-setup\n")
+	b.WriteString("# Lines starting with # are comments.\n\n")
 
-	b.WriteString("# ── Core ──────────────────────────────────────────────────────────────────\n")
-	b.WriteString("\n")
+	b.WriteString("# ── Core ──────────────────────────────────────────────────────────────────\n\n")
 	b.WriteString(fmt.Sprintf("retention_days   = %d\n", cfg.RetentionDays))
 	b.WriteString(fmt.Sprintf("log_dir          = %s\n", cfg.LogDir))
 	b.WriteString(fmt.Sprintf("callback_dir     = %s\n", cfg.CallbackDir))
 	b.WriteString(fmt.Sprintf("ansible_cfg_path = %s\n", cfg.AnsibleCfgPath))
 	b.WriteString("\n")
 
-	b.WriteString("# ── Loki (optional) ────────────────────────────────────────────────────────\n")
-	b.WriteString("# Push playbook results to Loki for Grafana dashboard visibility.\n")
-	b.WriteString("# Scenario 1 — bare EC2/VM : http://<grafana-ip>:3100\n")
-	b.WriteString("# Scenario 2 — k8s ingress : https://loki.company.com\n")
-	b.WriteString("# Scenario 3 — Grafana Cloud: https://logs-prod-xxx.grafana.net\n")
-	b.WriteString("# After filling in, run: neurader loki-setup\n")
-	b.WriteString("#\n")
+	b.WriteString("# ── Loki (optional) ────────────────────────────────────────────────────────\n\n")
 	writeOptional(&b, "loki_endpoint", cfg.LokiEndpoint, "http://<grafana-ip>:3100")
 	writeOptional(&b, "loki_username", cfg.LokiUsername, "")
 	writeOptional(&b, "loki_password", cfg.LokiPassword, "")
 	b.WriteString("\n")
 
-	b.WriteString("# ── Grafana (optional) ─────────────────────────────────────────────────────\n")
-	b.WriteString("# Required for: neurader loki-setup (auto dashboard import).\n")
-	b.WriteString("# grafana_api_key must be a service account token with Admin role.\n")
-	b.WriteString("#\n")
+	b.WriteString("# ── Grafana (optional) ─────────────────────────────────────────────────────\n\n")
 	writeOptional(&b, "grafana_endpoint", cfg.GrafanaEndpoint, "http://<grafana-ip>:3000")
 	writeOptional(&b, "grafana_api_key",  cfg.GrafanaAPIKey,   "glsa_xxxxxxxxxxxx")
 	b.WriteString("\n")
 
-	b.WriteString("# ── SSH auto-install (optional) ────────────────────────────────────────────\n")
-	b.WriteString("# neurader can install Loki on your Grafana EC2/VM automatically via SSH.\n")
-	b.WriteString("# Leave commented if Loki is already running (k8s, Grafana Cloud, etc).\n")
-	b.WriteString("#\n")
+	b.WriteString("# ── SSH auto-install (optional) ────────────────────────────────────────────\n\n")
 	writeOptional(&b, "loki_ssh_host", cfg.LokiSSHHost, "<grafana-ip>")
 	writeOptional(&b, "loki_ssh_user", cfg.LokiSSHUser, "ec2-user")
 	writeOptional(&b, "loki_ssh_key",  cfg.LokiSSHKey,  "~/.ssh/id_rsa")
 	writeOptional(&b, "loki_ssh_port", cfg.LokiSSHPort, "22")
 	b.WriteString("\n")
 
+	b.WriteString("# ── Alerting ───────────────────────────────────────────────────────────────\n")
+	b.WriteString("# Alerts fire automatically after every playbook run.\n")
+	b.WriteString("# Run: neurader alert-setup  to configure interactively.\n")
+	b.WriteString("# Run: neurader alert-test   to test all configured channels.\n\n")
+	writeBool(&b, "alert_on_failure",     cfg.AlertOnFailure)
+	writeBool(&b, "alert_on_unreachable", cfg.AlertOnUnreachable)
+	b.WriteString("\n")
+
+	b.WriteString("# ── Slack ──────────────────────────────────────────────────────────────────\n\n")
+	writeOptional(&b, "slack_webhook", cfg.SlackWebhook, "https://hooks.slack.com/services/xxx")
+	b.WriteString("\n")
+
+	b.WriteString("# ── PagerDuty ──────────────────────────────────────────────────────────────\n\n")
+	writeOptional(&b, "pagerduty_routing_key", cfg.PagerDutyRoutingKey, "")
+	b.WriteString("\n")
+
+	b.WriteString("# ── Microsoft Teams ────────────────────────────────────────────────────────\n\n")
+	writeOptional(&b, "teams_webhook", cfg.TeamsWebhook, "https://outlook.office.com/webhook/xxx")
+	b.WriteString("\n")
+
+	b.WriteString("# ── Jira ───────────────────────────────────────────────────────────────────\n\n")
+	writeOptional(&b, "jira_url",     cfg.JiraURL,     "https://yourorg.atlassian.net")
+	writeOptional(&b, "jira_user",    cfg.JiraUser,    "user@yourorg.com")
+	writeOptional(&b, "jira_token",   cfg.JiraToken,   "")
+	writeOptional(&b, "jira_project", cfg.JiraProject, "OPS")
+	b.WriteString("\n")
+
+	b.WriteString("# ── Email ──────────────────────────────────────────────────────────────────\n\n")
+	writeOptional(&b, "email_smtp_host", cfg.EmailSMTPHost, "smtp.gmail.com")
+	writeOptional(&b, "email_smtp_port", cfg.EmailSMTPPort, "587")
+	writeOptional(&b, "email_from",      cfg.EmailFrom,     "neurader@yourorg.com")
+	writeOptional(&b, "email_to",        cfg.EmailTo,       "team@yourorg.com")
+	writeOptional(&b, "email_password",  cfg.EmailPassword, "")
+	b.WriteString("\n")
+
+	b.WriteString("# ── Telegram ───────────────────────────────────────────────────────────────\n\n")
+	writeOptional(&b, "telegram_bot_token", cfg.TelegramBotToken, "")
+	writeOptional(&b, "telegram_chat_id",   cfg.TelegramChatID,   "")
+	b.WriteString("\n")
+
+	b.WriteString("# ── Generic Webhook ────────────────────────────────────────────────────────\n\n")
+	writeOptional(&b, "webhook_url",    cfg.WebhookURL,    "https://your-endpoint.com/webhook")
+	writeOptional(&b, "webhook_method", cfg.WebhookMethod, "POST")
+	b.WriteString("\n")
+
+	b.WriteString("# ── Prometheus Alertmanager ─────────────────────────────────────────────────\n\n")
+	writeOptional(&b, "alertmanager_url", cfg.AlertmanagerURL, "http://alertmanager:9093")
+	b.WriteString("\n")
+
 	return os.WriteFile(ConfigFile, []byte(b.String()), 0644)
 }
 
-// writeOptional writes an active line if val is set,
-// or a commented-out placeholder if val is empty.
 func writeOptional(b *strings.Builder, key, val, placeholder string) {
 	if val != "" {
-		b.WriteString(fmt.Sprintf("%-17s= %s\n", key, val))
+		b.WriteString(fmt.Sprintf("%-22s= %s\n", key, val))
 	} else if placeholder != "" {
-		b.WriteString(fmt.Sprintf("# %-16s= %s\n", key, placeholder))
+		b.WriteString(fmt.Sprintf("# %-21s= %s\n", key, placeholder))
 	} else {
-		b.WriteString(fmt.Sprintf("# %-16s=\n", key))
+		b.WriteString(fmt.Sprintf("# %-21s=\n", key))
 	}
+}
+
+func writeBool(b *strings.Builder, key string, val bool) {
+	v := "false"
+	if val {
+		v = "true"
+	}
+	b.WriteString(fmt.Sprintf("%-22s= %s\n", key, v))
 }
