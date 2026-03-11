@@ -1,18 +1,21 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	"neurader/internal/alert"
 	"neurader/internal/config"
 	"neurader/internal/grafana"
 	"neurader/internal/hostcmd"
 	"neurader/internal/inventory"
-	"neurader/internal/loki"
 	"neurader/internal/logs"
+	"neurader/internal/loki"
 	"neurader/internal/ping"
 	"neurader/internal/setup"
 	"neurader/internal/upgrade"
@@ -45,10 +48,40 @@ func main() {
 			if err != nil {
 				return err
 			}
+
+			// 1. Clean old logs
 			logs.Clean(cfg.LogDir, cfg.RetentionDays)
+
+			// 2. Push to Loki
 			if cfg.LokiEndpoint != "" {
-				return loki.PushLatest(cfg)
+				if err := loki.PushLatest(cfg); err != nil {
+					fmt.Fprintf(os.Stderr, "[neurader] loki push failed: %v\n", err)
+				}
 			}
+
+			// 3. Fire alerts
+			latestPath, err := logs.LatestPath(cfg.LogDir)
+			if err != nil || latestPath == "" {
+				return nil
+			}
+			data, err := os.ReadFile(latestPath)
+			if err != nil {
+				return nil
+			}
+			var run logs.PlaybookRun
+			if err := json.Unmarshal(data, &run); err != nil {
+				return nil
+			}
+			runID := filepath.Base(latestPath)
+			runID = runID[:len(runID)-len(filepath.Ext(runID))]
+
+			results := alert.Fire(cfg, run, runID)
+			for _, r := range results {
+				if !r.OK {
+					fmt.Fprintf(os.Stderr, "[neurader] alert %s failed: %v\n", r.Channel, r.Err)
+				}
+			}
+
 			return nil
 		},
 	})
@@ -66,10 +99,10 @@ func main() {
 		},
 	})
 
-	// ── neurader show <filename> ───────────────────────────────────────────
+	// ── neurader show <filename|playbook> ──────────────────────────────────
 	root.AddCommand(&cobra.Command{
-		Use:   "show [filename]",
-		Short: "Show the detailed result of a specific playbook run",
+		Use:   "show [playbook or filename]",
+		Short: "Show the detailed result of a playbook run",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -186,6 +219,51 @@ func main() {
 			return grafana.Setup(cfg)
 		},
 	})
+
+	// ── neurader alert-test ────────────────────────────────────────────────
+	root.AddCommand(func() *cobra.Command {
+		var channel string
+		cmd := &cobra.Command{
+			Use:   "alert-test",
+			Short: "Send a test alert to all configured channels",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				cfg, err := config.Load()
+				if err != nil {
+					return err
+				}
+
+				greenC := color.New(color.FgGreen, color.Bold)
+				redC   := color.New(color.FgRed, color.Bold)
+				boldC  := color.New(color.Bold)
+
+				fmt.Println()
+				boldC.Println("  Sending test alerts...")
+				fmt.Println()
+
+				results := alert.Test(cfg)
+
+				if len(results) == 0 {
+					fmt.Println("  No alert channels configured.")
+					fmt.Println("  Run: neurader alert-setup  to configure alerts.")
+					fmt.Println()
+					return nil
+				}
+
+				_ = channel
+				for _, r := range results {
+					if r.OK {
+						greenC.Printf("  ✓  %-20s  sent\n", r.Channel)
+					} else {
+						redC.Printf("  ✗  %-20s  failed: %v\n", r.Channel, r.Err)
+					}
+				}
+				fmt.Println()
+				return nil
+			},
+		}
+		cmd.Flags().StringVarP(&channel, "channel", "c", "", "Test a specific channel (slack, pagerduty, jira, email, teams, telegram, webhook, alertmanager)")
+		return cmd
+	}())
 
 	// ── neurader status ────────────────────────────────────────────────────
 	root.AddCommand(&cobra.Command{
