@@ -236,8 +236,10 @@ func main() {
 				return err
 			}
 			if saved {
-				fmt.Println("\n  u2713  Alert configuration saved to /etc/neurader/neurader.conf")
-				fmt.Println("  Run: neurader alert-test  to verify all channels\n")
+				fmt.Println()
+				fmt.Println("  ✓  Alert configuration saved to /etc/neurader/neurader.conf")
+				fmt.Println("  Run: neurader alert-test  to verify all channels")
+				fmt.Println()
 			}
 			return nil
 		},
