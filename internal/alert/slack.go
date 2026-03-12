@@ -81,7 +81,7 @@ func buildSlackBlocks(message string) slackPayload {
 
 	return slackPayload{
 		Username: "NeuRader",
-		IconURL:  "./neurader.png",
+		IconURL:  "https://neurader.cloud/neurader/neurader.png",
 		Blocks:   blocks,
 	}
 }
