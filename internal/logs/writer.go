@@ -36,6 +36,7 @@ type FailedTask struct {
 	RC        int                    `json:"rc"`
 	Exception string                 `json:"exception"`
 	TaskArgs  map[string]interface{} `json:"task_args"`
+	LoopItem  string                 `json:"loop_item,omitempty"` // set when task uses loop/with_items
 }
 
 // HostSummary mirrors Ansible's stats.summarize() output.

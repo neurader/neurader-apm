@@ -104,11 +104,78 @@ class CallbackModule(CallbackBase):
         host = result._host.get_name()
         task_detail = self._extract_task_detail(result)
 
+        # If ignore_errors: true is set on the task, the playbook continues
+        # but the failure is still real — record it with a note so engineers
+        # can see what was silently swallowed.
+        if ignore_errors:
+            task_detail['task_name'] = '[ignored] ' + task_detail['task_name']
+
         if host not in self._host_results:
             self._host_results[host] = {
                 'status':       'failed',
                 'failed_tasks': [],
             }
+        else:
+            self._host_results[host]['status'] = 'failed'
+
+        self._host_results[host]['failed_tasks'].append(task_detail)
+
+    def v2_runner_item_on_failed(self, result):
+        """Capture individual loop item failures.
+
+        When a task loops over a list (with_items / loop), Ansible fires this
+        callback for each item that fails rather than v2_runner_on_failed.
+        We record each failed item as a separate failed_task entry so that
+        '- name: install packages\n  loop: [nginx, redis, doesnotexist]'
+        captures exactly which item failed, not just the task name.
+        """
+        host = result._host.get_name()
+
+        r    = result._result
+        item = r.get('item', '')
+        # item may be a dict (e.g. loop over dicts) — stringify for display
+        if isinstance(item, dict):
+            item_label = ', '.join('{}={}'.format(k, v) for k, v in item.items())
+        else:
+            item_label = str(item) if item != '' else ''
+
+        task_name = result._task.get_name()
+        if item_label:
+            task_name = '{} [item: {}]'.format(task_name, item_label)
+
+        detail = {
+            'task_name': task_name,
+            'task_path': self._task_path(result),
+            'module':    result._task.action,
+            'msg':       r.get('msg', ''),
+            'stdout':    r.get('stdout', '') or r.get('module_stdout', ''),
+            'stderr':    r.get('stderr', '') or r.get('module_stderr', ''),
+            'rc':        r.get('rc', -1),
+            'exception': r.get('exception', ''),
+            'task_args': self._extract_task_args(result),
+            'loop_item': item_label,
+        }
+
+        if host not in self._host_results:
+            self._host_results[host] = {'status': 'failed', 'failed_tasks': []}
+        else:
+            self._host_results[host]['status'] = 'failed'
+
+        self._host_results[host]['failed_tasks'].append(detail)
+
+    def v2_runner_on_async_failed(self, result):
+        """Capture async task failures (tasks run with async: N).
+
+        Ansible does not call v2_runner_on_failed for async tasks — it fires
+        this callback instead when the async job result is polled and found
+        to have failed.
+        """
+        host = result._host.get_name()
+        task_detail = self._extract_task_detail(result)
+        task_detail['task_name'] = '[async] ' + task_detail['task_name']
+
+        if host not in self._host_results:
+            self._host_results[host] = {'status': 'failed', 'failed_tasks': []}
         else:
             self._host_results[host]['status'] = 'failed'
 
@@ -185,9 +252,11 @@ class CallbackModule(CallbackBase):
         """Extract full task details from a failed result.
 
         Handles module-specific error formats:
-        - yum/dnf: per-package errors in r['failures'] list
-        - apt: errors in r['msg']
-        - general modules: r['msg'], r['stderr']
+        - yum/dnf:  per-package errors in r['failures'] list
+        - apt:      errors in r['msg'] / r['stderr']
+        - loop:     failed items extracted from r['results'] list
+        - command/shell: stdout + stderr + rc
+        - general:  r['msg'], r['stderr'], r['exception']
         """
         r = result._result
 
@@ -195,14 +264,31 @@ class CallbackModule(CallbackBase):
         failures = r.get('failures', [])
         results  = r.get('results', [])
 
-        # Collect specific package/item errors
         details = []
+
+        # yum/dnf: explicit failures list
         for f in failures:
             if f and f not in details:
-                details.append(f)
+                details.append(str(f))
+
+        # results list — used by yum/dnf for per-package output AND by loop
+        # tasks when all items fail at once (non-item loop result).
+        # We extract any entry that has failed=True or contains an error string.
         for item in results:
-            if isinstance(item, str) and 'No package' in item and item not in details:
-                details.append(item)
+            if isinstance(item, dict):
+                # loop item dict: {'failed': True, 'msg': '...', 'item': '...'}
+                if item.get('failed') or item.get('rc', 0) != 0:
+                    item_label = item.get('item', '')
+                    if isinstance(item_label, dict):
+                        item_label = str(item_label)
+                    item_msg = item.get('msg', '') or item.get('stderr', '')
+                    entry = '[item: {}] {}'.format(item_label, item_msg).strip()
+                    if entry and entry not in details:
+                        details.append(entry)
+            elif isinstance(item, str):
+                # plain string results (yum legacy format)
+                if ('No package' in item or 'Error' in item) and item not in details:
+                    details.append(item)
 
         # Append specific details to msg for full clarity
         if details:
