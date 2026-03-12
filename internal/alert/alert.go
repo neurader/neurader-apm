@@ -201,3 +201,78 @@ func FailedHostsSummary(hosts []FailedHost) string {
 	}
 	return strings.Join(names, ", ")
 }
+
+// ChannelStatus describes a single alert channel's configuration state.
+type ChannelStatus struct {
+	Name      string
+	Enabled   bool
+	Detail    string // brief hint about what is configured
+}
+
+// Channels returns the configuration status of every alert channel.
+// Enabled = true means the channel has enough credentials to fire.
+func Channels(cfg config.Config) []ChannelStatus {
+	return []ChannelStatus{
+		{
+			Name:    "Slack",
+			Enabled: cfg.SlackWebhook != "",
+			Detail:  hint(cfg.SlackWebhook, "webhook configured"),
+		},
+		{
+			Name:    "PagerDuty",
+			Enabled: cfg.PagerDutyRoutingKey != "",
+			Detail:  hint(cfg.PagerDutyRoutingKey, "routing key configured"),
+		},
+		{
+			Name:    "Microsoft Teams",
+			Enabled: cfg.TeamsWebhook != "",
+			Detail:  hint(cfg.TeamsWebhook, "webhook configured"),
+		},
+		{
+			Name:    "Jira",
+			Enabled: cfg.JiraURL != "" && cfg.JiraToken != "",
+			Detail:  hintJira(cfg),
+		},
+		{
+			Name:    "Email",
+			Enabled: cfg.EmailSMTPHost != "" && cfg.EmailTo != "",
+			Detail:  hintEmail(cfg),
+		},
+		{
+			Name:    "Telegram",
+			Enabled: cfg.TelegramBotToken != "" && cfg.TelegramChatID != "",
+			Detail:  hint(cfg.TelegramBotToken, "bot token + chat ID configured"),
+		},
+		{
+			Name:    "Webhook",
+			Enabled: cfg.WebhookURL != "",
+			Detail:  hint(cfg.WebhookURL, cfg.WebhookMethod+" "+cfg.WebhookURL),
+		},
+		{
+			Name:    "Alertmanager",
+			Enabled: cfg.AlertmanagerURL != "",
+			Detail:  hint(cfg.AlertmanagerURL, cfg.AlertmanagerURL),
+		},
+	}
+}
+
+func hint(val, detail string) string {
+	if val == "" {
+		return "not configured"
+	}
+	return detail
+}
+
+func hintJira(cfg config.Config) string {
+	if cfg.JiraURL == "" || cfg.JiraToken == "" {
+		return "not configured"
+	}
+	return cfg.JiraURL + " · project: " + cfg.JiraProject
+}
+
+func hintEmail(cfg config.Config) string {
+	if cfg.EmailSMTPHost == "" || cfg.EmailTo == "" {
+		return "not configured"
+	}
+	return cfg.EmailSMTPHost + " → " + cfg.EmailTo
+}
