@@ -14,9 +14,10 @@ type slackPayload struct {
 }
 
 type slackBlock struct {
-	Type string      `json:"type"`
-	Text *slackText  `json:"text,omitempty"`
-	Fields []slackText `json:"fields,omitempty"`
+	Type     string      `json:"type"`
+	Text     *slackText  `json:"text,omitempty"`
+	Fields   []slackText `json:"fields,omitempty"`
+	Elements []slackText `json:"elements,omitempty"`
 }
 
 type slackText struct {
@@ -45,11 +46,10 @@ func sendSlack(webhookURL, message string) error {
 }
 
 func buildSlackBlocks(message string) slackPayload {
-	// Convert plain message to Slack blocks for rich formatting
 	lines := strings.Split(message, "\n")
 	var blocks []slackBlock
 
-	// Header line
+	// Header block
 	if len(lines) > 0 {
 		blocks = append(blocks, slackBlock{
 			Type: "section",
@@ -69,10 +69,10 @@ func buildSlackBlocks(message string) slackPayload {
 		})
 	}
 
-	// Footer
+	// Footer — context block uses "elements" not "fields"
 	blocks = append(blocks, slackBlock{
 		Type: "context",
-		Fields: []slackText{
+		Elements: []slackText{
 			{Type: "mrkdwn", Text: "Sent by *NeuRader* — Ansible Execution Monitor"},
 		},
 	})
