@@ -10,6 +10,8 @@ import (
 )
 
 type slackPayload struct {
+	Username string       `json:"username"`
+	IconURL  string       `json:"icon_url"`
 	Blocks []slackBlock `json:"blocks"`
 }
 
@@ -77,5 +79,9 @@ func buildSlackBlocks(message string) slackPayload {
 		},
 	})
 
-	return slackPayload{Blocks: blocks}
+	return slackPayload{
+		Username: "NeuRader",
+		IconURL:  "./neurader.png",
+		Blocks:   blocks,
+	}
 }
