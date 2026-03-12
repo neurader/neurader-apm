@@ -294,7 +294,42 @@ func main() {
 		Use:   "status",
 		Short: "Show current configuration and health",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return setup.Status()
+			if err := setup.Status(); err != nil {
+				return err
+			}
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			green  := color.New(color.FgGreen, color.Bold)
+			dim    := color.New(color.FgHiBlack)
+			yellow := color.New(color.FgYellow)
+
+			fmt.Println()
+			fmt.Println("  Alert Channels")
+			fmt.Println("  ──────────────────────────────────────────")
+			channels := alert.Channels(cfg)
+			activeCount := 0
+			for _, ch := range channels {
+				if ch.Enabled {
+					activeCount++
+					green.Printf("  ✓  %-20s", ch.Name)
+					dim.Printf("  %s\n", ch.Detail)
+				} else {
+					dim.Printf("  -  %-20s", ch.Name)
+					dim.Printf("  %s\n", ch.Detail)
+				}
+			}
+			fmt.Println("  ──────────────────────────────────────────")
+			if activeCount == 0 {
+				yellow.Println("  No alert channels configured.")
+				dim.Println("  Run: neurader alert-setup")
+			} else {
+				green.Printf("  %d", activeCount)
+				fmt.Printf(" of %d channel(s) active\n", len(channels))
+			}
+			fmt.Println()
+			return nil
 		},
 	})
 
