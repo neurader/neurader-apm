@@ -1,174 +1,313 @@
-# NeuRader
+<div align="center">
 
-> Ansible Execution Monitor — automatically captures every playbook run as structured JSON with per-host results, full error output, and optional Grafana integration.
+<br/>
+
+```
+███╗   ██╗███████╗██╗   ██╗██████╗  █████╗ ██████╗ ███████╗██████╗
+████╗  ██║██╔════╝██║   ██║██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗
+██╔██╗ ██║█████╗  ██║   ██║██████╔╝███████║██║  ██║█████╗  ██████╔╝
+██║╚██╗██║██╔══╝  ██║   ██║██╔══██╗██╔══██║██║  ██║██╔══╝  ██╔══██╗
+██║ ╚████║███████╗╚██████╔╝██║  ██║██║  ██║██████╔╝███████╗██║  ██║
+╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝
+```
+
+**Lightweight Ansible execution monitoring. Without the AWX overhead.**
+
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/go-1.22+-00ADD8.svg)](https://golang.org)
+[![Version](https://img.shields.io/badge/version-v0.5.x-brightgreen.svg)]()
+[![Org](https://img.shields.io/badge/org-neurader-1A1A2E.svg)](https://github.com/neurader)
+
+<br/>
+
+</div>
+
+---
+
+## The Problem
+
+AWX and Ansible Tower are powerful. They are also heavy.
+
+A minimum AWX deployment needs a `t3.large`. It needs a Kubernetes cluster or Docker Compose stack. It needs a PostgreSQL database, Redis, and a web server. You spend more time maintaining the monitoring infrastructure than the Ansible infrastructure it monitors.
+
+For most teams running Ansible on a handful of nodes, this is too much.
+
+**NeuRader runs on a `t3.micro`.**
+
+---
+
+## What is NeuRader
+
+NeuRader is an open-source Ansible execution monitoring and alerting controller written in Go. It gives you full visibility into your Ansible runs — playbooks, hosts, tasks, failures — with a Grafana/Loki dashboard, a clean CLI, and Slack/PagerDuty/Jira alerting. No Kubernetes. No heavy stack. One binary.
+
+```
+                    ┌─────────────────────┐
+                    │   NeuRader          │
+                    │   Controller        │
+                    │                     │
+                    │  Grafana dashboard  │
+                    │  Alerting           │
+                    │  CLI                │
+                    │  REST API           │
+                    └────────┬────────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+   ┌──────▼──────┐   ┌───────▼─────┐   ┌───────▼─────┐
+   │  Node 1     │   │  Node 2     │   │  Node 3     │
+   │  NeuCell    │   │  NeuCell    │   │  NeuCell    │
+   │  agent      │   │  agent      │   │  agent      │
+   └─────────────┘   └─────────────┘   └─────────────┘
+   cloud / on-prem / bare metal / VPS
+```
+
+---
+
+## Features
+
+### Execution Monitoring
+- Full Ansible run history — every playbook, every host, every task
+- Failed task capture with complete detail per host
+- Sensitive key scrubbing — vault passwords and secrets never logged
+- Run-centric Grafana/Loki dashboard with cascading dropdowns: **Playbook → Run → Host**
+
+### Alerting (v0.5.x)
+- **Slack** — run failure notifications with full context
+- **PagerDuty** — incident creation on threshold breach
+- **Jira** — automatic ticket creation on failure
+- Fire-and-forget model — alerts dispatch without blocking execution
+
+### CLI
+```bash
+neurader inventory    # view managed node inventory
+neurader last         # show last playbook run result
+neurader hosts        # list all hosts and their status
+neurader ping         # ping all managed nodes
+neurader show         # detailed view of a specific run
+```
+
+### NeuCell Integration (v1.0)
+- NeuCell agent deployed as a Cell on every managed node
+- Automatic Cell activation triggered by NeuRader on demand
+- Threshold-based alerting from node metrics — CPU, memory, disk, TCP, FDs
+- Scale-to-zero Cell management — Ansible, Terraform, and tool Cells activated only when needed
 
 ---
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Ansible Controller                       │
-│                                                                 │
-│   ansible-playbook site.yml                                     │
-│          │                                                      │
-│          ▼                                                      │
-│   ┌─────────────────────────────────────────────┐               │
-│   │           Ansible Callback System            │              │
-│   │                                              │              │
-│   │   ansible.cfg                                │              │
-│   │   callbacks_enabled = neurader  ◄── patched  │              │
-│   │            │                   by init       │              │
-│   │            ▼                                 │              │
-│   │   neurader_callback.py                       │              │
-│   │   (Python plugin, auto-loaded by Ansible)    │              │
-│   └─────────────────────────────────────────────┘               │
-│          │                                                      │
-│          │  captures every host result in real time             │
-│          ▼                                                      │
-│   /var/log/neurader/                                            │
-│   └── site.yml_2025-01-24_14-30-00.json                         │
-│                                                                 │
-│   neurader binary (/usr/local/bin/neurader)                     │
-│   ├── reads logs  →  neurader list / show / staus               │
-│   └── pushes logs →  Grafana (optional)                         │
-└─────────────────────────────────────────────────────────────────┘
-          │  SSH                │  SSH                │  SSH
-          ▼                     ▼                     ▼
-   ┌────────────┐       ┌────────────┐       ┌────────────┐
-   │  node1     │       │  node2     │       │  node3     │
-   │  managed   │       │  managed   │       │  managed   │
-   │  node      │       │  node      │       │  node      │
-   │            │       │            │       │            │
-   │ no neurader│       │ no neurader│       │ no neurader│
-   │ no agents  │       │ no agents  │       │ no agents  │
-   └────────────┘       └────────────┘       └────────────┘
-```
-
-neurader lives entirely on the **controller**. Managed nodes have no awareness of it.
-
----
-
-## Components
-
-### neurader binary
-A single statically linked Go binary at `/usr/local/bin/neurader`. It sets up the environment via `neurader init` and provides CLI commands to read and push logs. It never runs as a daemon and opens no ports.
-
-### neurader_callback.py
-A Python callback plugin that Ansible loads automatically before every playbook run. It hooks into Ansible's internal event system and captures every host result in real time. When the playbook finishes it writes a structured JSON file to `/var/log/neurader/`. It runs inside the Ansible process — no subprocess, no network calls, no side effects.
-
-### /var/log/neurader/
-The log directory where every playbook run is stored as a JSON file. Files are named `<playbook>_<date>_<time>.json` and retained for a configurable number of days. The callback plugin writes here directly — the neurader binary reads from here.
-
-### /etc/neurader/neurader.conf
-The configuration file written by `neurader init`. Stores log retention, Grafana credentials, and detected paths for the callback directory and ansible.cfg.
-
----
-
-## Data flow
+NeuRader is the **controller**. It runs on your management node and connects to all managed nodes via NeuCell agents.
 
 ```
-ansible-playbook runs
-        │
-        ▼
-Ansible loads neurader_callback.py from callback_dir
-        │
-        ▼
-v2_runner_on_ok / v2_runner_on_failed / v2_runner_on_unreachable
-capture each host result as playbook executes
-        │
-        ▼
-v2_playbook_on_stats fires when playbook completes
-        │
-        ▼
-JSON written to /var/log/neurader/<playbook>_<date>_<time>.json
-        │
-        ├──► neurader list     reads log index
-        ├──► neurader show     reads specific log
-        └──► neurader push     sends to Grafana API
+NeuRader Controller
+  │
+  ├── Ansible callback plugin
+  │     Captures run data in real time
+  │     Pushes to NeuRader on every event
+  │
+  ├── Grafana + Loki
+  │     Run-centric dashboard
+  │     Playbook → Run → Host drill-down
+  │
+  ├── Alerting engine
+  │     Slack / PagerDuty / Jira
+  │     Fire-and-forget dispatch
+  │
+  └── NeuCell orchestration (v1.0)
+        Activates / deactivates Cells on managed nodes
+        Receives threshold breach events
+        Triggers alerts from node metrics
 ```
 
 ---
 
-## Log structure
+## Why Not AWX
 
-Every run produces one JSON file:
-
-```json
-{
-  "playbook":    "site.yml",
-  "start_time":  "2025-01-24T14:29:45Z",
-  "end_time":    "2025-01-24T14:30:02Z",
-  "total_hosts": 3,
-  "hosts": {
-    "node1": {
-      "status": "success",
-      "error_output": null,
-      "summary": { "ok": 12, "failures": 0, "changed": 3, "unreachable": 0, "skipped": 1 }
-    },
-    "node2": {
-      "status": "failed",
-      "error_output": {
-        "msg":    "Permission denied",
-        "stdout": "",
-        "stderr": "sudo: a password is required",
-        "rc":     1,
-        "module": "ansible.builtin.command"
-      },
-      "summary": { "ok": 5, "failures": 1, "changed": 0, "unreachable": 0, "skipped": 0 }
-    },
-    "node3": {
-      "status": "unreachable",
-      "error_output": {
-        "msg": "Failed to connect to the host via ssh: Connection timed out"
-      },
-      "summary": { "ok": 0, "failures": 0, "changed": 0, "unreachable": 1, "skipped": 0 }
-    }
-  }
-}
-```
-
----
-
-## Ansible compatibility
-
-neurader uses the standard Ansible callback interface that has been stable since Ansible 2.0. `neurader init` detects the install method automatically and places the callback plugin in the correct directory.
-
-| Install method | Controller OS | Supported |
+| | AWX / Tower | NeuRader |
 |---|---|---|
-| `apt install ansible` | Ubuntu, Debian | ✅ |
-| `dnf install ansible` | RHEL, Rocky, AlmaLinux, Fedora, Amazon Linux 2023 | ✅ |
-| `yum install ansible` | Amazon Linux 2, older RHEL/CentOS | ✅ |
-| `pip install ansible` | Any Linux | ✅ |
-| `pipx install ansible` | Any Linux | ✅ |
-| `conda install ansible` | Any Linux | ✅ |
+| Minimum instance | t3.large (~$60/mo) | t3.micro (~$8/mo) |
+| Dependencies | K8s or Docker Compose + Postgres + Redis | Single Go binary |
+| Setup time | Hours | Minutes |
+| Ansible callback | Built-in | Lightweight plugin |
+| Dashboard | Built-in web UI | Grafana + Loki |
+| Alerting | Notifications system | Slack / PagerDuty / Jira |
+| Node agent | None | NeuCell |
+| License | Apache 2.0 | Apache 2.0 |
+
+NeuRader is not trying to replace AWX for large enterprise deployments. It is built for the developer or small team running Ansible on a VPS, EC2 instance, or bare metal server who wants visibility without operational overhead.
 
 ---
 
-## Binary compatibility
+## Quick Start
 
-neurader is a statically linked Go binary — it carries all dependencies inside itself and requires no runtime, no Python, and no system libraries. The same binary runs on Ubuntu 20, Ubuntu 24, Amazon Linux, Alpine, Arch, and any other Linux distro.
+### Install
 
-| Binary | CPU | Common machines |
-|---|---|---|
-| `neurader-linux-amd64` | x86-64 | Most servers, AWS EC2, GCP, Azure VMs |
-| `neurader-linux-arm64` | ARM 64-bit | AWS Graviton, GCP Tau T2A, Raspberry Pi 4/5 |
-| `neurader-linux-arm`   | ARM 32-bit | Raspberry Pi 2/3, older embedded controllers |
+```bash
+curl -L https://neurader.cloud/install | sh
+```
+
+Or download the binary directly from [releases](https://github.com/neurader/neurader/releases).
+
+### Configure
+
+```yaml
+# neurader.yaml
+server:
+  port: 8080
+  host: "0.0.0.0"
+
+loki:
+  url: "http://localhost:3100"
+
+alerting:
+  slack:
+    webhook: "https://hooks.slack.com/services/..."
+    channel: "#infra-alerts"
+  pagerduty:
+    integration_key: "..."
+  jira:
+    url: "https://yourorg.atlassian.net"
+    project: "OPS"
+    token: "..."
+```
+
+### Ansible Callback
+
+Add the NeuRader callback plugin to your Ansible project:
+
+```ini
+# ansible.cfg
+[defaults]
+callback_plugins   = ./callbacks
+callbacks_enabled  = neurader
+```
+
+```bash
+# Set controller URL
+export NEURADER_URL=http://your-controller:8080
+```
+
+Run your playbook normally. NeuRader captures everything.
+
+### Grafana Dashboard
+
+Import the NeuRader dashboard from `dashboards/neurader.json`. The dashboard includes:
+
+- Run timeline with status per playbook
+- Per-run host breakdown
+- Failed task detail with full output
+- Cascading dropdowns: **Playbook → Run → Host**
 
 ---
 
-## What neurader does not do
+## CLI Reference
 
-- Does not run on managed nodes — controller only
-- Does not open any ports or expose any API
-- Does not run as a background daemon or service
-- Does not modify playbooks or inventory
-- Does not require changes to how you run `ansible-playbook`
-- Does not touch managed nodes in any way
+```bash
+neurader inventory              # list all hosts in managed inventory
+neurader last                   # show result of the last playbook run
+neurader last --playbook site   # last run for a specific playbook
+neurader hosts                  # all hosts with current status
+neurader ping                   # connectivity check across all nodes
+neurader show <run-id>          # full detail for a specific run
+neurader show --last            # full detail for the last run
+```
+
+---
+
+## Alerting
+
+NeuRader uses a **fire-and-forget** model for alerts. When a run fails or a threshold is breached, the alert is dispatched asynchronously — it never blocks the Ansible execution pipeline.
+
+### Slack
+
+```
+[NeuRader] ❌ Playbook failed: site.yml
+Run ID:    run-20240315-001
+Host:      web-prod-01
+Task:      Deploy application
+Error:     Permission denied on /var/www/app
+```
+
+### PagerDuty
+
+Incidents are created automatically with full run context. Resolved automatically when the next run succeeds on the same host.
+
+### Jira
+
+Tickets created in your configured project with playbook name, run ID, host, failed task, and full error output attached.
+
+---
+
+## NeuCell Integration
+
+NeuRader v1.0 introduces full NeuCell integration — turning NeuRader into a complete infrastructure control plane.
+
+With NeuCell deployed on managed nodes:
+
+```bash
+# From NeuRader controller — activate an Ansible Cell on a node
+neurader cell activate --node web-prod-01 --cell ansible
+
+# View Cell states across all nodes
+neurader cell list
+
+# Node metrics and threshold status
+neurader metrics --node web-prod-01
+```
+
+Cells activate on demand and scale to zero when idle. The monitoring-cell on each node runs continuously, pushing threshold breach events to the NeuRader controller for alerting.
+
+See **[NeuCell →](https://github.com/neurader/neucell)** for the full Cell runtime documentation.
+
+---
+
+## Roadmap
+
+| Version | Scope |
+|---|---|
+| v0.4.0 ✅ | Grafana/Loki dashboard, callback upgrades, sensitive key scrubbing, `inventory` `last` `hosts` `ping` CLI commands |
+| v0.5.x ✅ | Slack / PagerDuty / Jira alerting, fire-and-forget model, configurable log retention |
+| v0.6.0 | REST API for external integrations, webhook support |
+| v0.7.0 | Multi-controller federation, node groups |
+| v1.0.0 | NeuCell full integration — Cell orchestration, node metrics, threshold alerting |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Go |
+| Log storage | Loki |
+| Dashboard | Grafana |
+| Ansible integration | Callback plugin |
+| Alerting | Slack / PagerDuty / Jira |
+| Node agent | NeuCell |
+| License | Apache 2.0 |
+
+---
+
+## Contributing
+
+NeuRader is an independent open-source project. Issues, ideas, and pull requests are welcome.
+
+```bash
+git clone https://github.com/neurader/neurader
+cd neurader
+go build ./...
+go test ./...
+```
 
 ---
 
 ## License
 
-Apache License 2.0
+Apache 2.0 — see [LICENSE](LICENSE)
 
+---
+
+<div align="center">
+
+**[neurader.cloud](https://neurader.cloud)** · **[NeuRader](https://github.com/neurader/neurader)** · **[NeuCell](https://github.com/neurader/neucell)**
+
+</div>
