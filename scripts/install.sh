@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ────────────────────────────────────────────────────────────────────────────
 # neurader installer
-# Usage: curl -L https://neurader.cloud/neurader/install.sh | sudo bash |
+# Usage: curl -L https://neurader.cloud/neurader/install.sh | sudo bash | 
 # ────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
