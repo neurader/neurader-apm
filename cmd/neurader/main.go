@@ -12,6 +12,7 @@ import (
 	"neurader/internal/alert"
 	"neurader/internal/alertui"
 	"neurader/internal/config"
+	"neurader/internal/cron"
 	"neurader/internal/grafana"
 	"neurader/internal/hostcmd"
 	"neurader/internal/inventory"
@@ -174,6 +175,15 @@ func main() {
 			}
 			logs.Clean(cfg.LogDir, cfg.RetentionDays)
 			return nil
+		},
+	})
+
+	// ── neurader cron ──────────────────────────────────────────────────────
+	root.AddCommand(&cobra.Command{
+		Use:   "cron",
+		Short: "Show all scheduled cron jobs on this controller",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cron.List()
 		},
 	})
 
