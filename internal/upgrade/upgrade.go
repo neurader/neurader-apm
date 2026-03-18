@@ -104,15 +104,22 @@ func Run(currentVersion string) error {
 		installPath = current
 	}
 
-	if err := os.Rename(tmpFile, installPath); err != nil {
-		// Rename can fail across filesystems (/tmp → /usr/bin)
-		// Fall back to copy + delete
-		if err := copyFile(tmpFile, installPath); err != nil {
-			return fmt.Errorf("failed to install binary to %s: %w", installPath, err)
-		}
-		if err := os.Chmod(installPath, 0755); err != nil {
-			return fmt.Errorf("chmod on installed binary failed: %w", err)
-		}
+	// Write to a temp file in the same directory as the binary first,
+	// then rename atomically. This avoids "text file busy" which happens
+	// when trying to overwrite a running binary directly.
+	stagingFile := filepath.Join(filepath.Dir(installPath), ".neurader-upgrade-tmp")
+
+	if err := copyFile(tmpFile, stagingFile); err != nil {
+		return fmt.Errorf("failed to stage binary to %s: %w", stagingFile, err)
+	}
+	if err := os.Chmod(stagingFile, 0755); err != nil {
+		os.Remove(stagingFile)
+		return fmt.Errorf("chmod on staged binary failed: %w", err)
+	}
+	// Atomic rename — replaces the running binary safely
+	if err := os.Rename(stagingFile, installPath); err != nil {
+		os.Remove(stagingFile)
+		return fmt.Errorf("failed to install binary to %s: %w", installPath, err)
 	}
 
 	fmt.Printf("\n[neurader] ✓ upgraded %s → %s\n", currentVersion, latest.Version)
